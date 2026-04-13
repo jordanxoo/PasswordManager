@@ -1,10 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth,vault
-
+from app.database import engine,Base
+from app import models
+from contextlib import asynccontextmanager
 origins = ["http://localhost:5173"]
 
-app = FastAPI(title = "Password Manager")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    yield    
+
+app = FastAPI(title = "Password Manager",lifespan=lifespan)
 
 app.add_middleware(CORSMiddleware,allow_origins=origins,allow_methods=["*"],allow_credentials= True,allow_headers=["*"])
 
@@ -16,4 +25,4 @@ async def health():
     return {"status" : "ok"}
 
 
-
+    
