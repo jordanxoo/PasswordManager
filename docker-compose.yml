@@ -1,0 +1,73 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pm_postgres
+    ports:
+      - "5432:5432"
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pmpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-pm_db}
+
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pm}" ]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+    volumes:
+      - pm_volume:/var/lib/postgresql/data
+
+    networks:
+      - pm_net
+
+  
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app 
+    networks:
+      - pm_net
+
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: dockerfile
+    container_name: backend
+    ports:
+      - "8000:8000"
+    
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}          
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ARGON2_TIME_COST: ${ARGON2_TIME_COST:-3}
+      ARGON2_MEMORY_COST: ${ARGON2_MEMORY_COST:-65536}
+
+    volumes:
+      - ./backend:/app
+    
+    depends_on:
+      - postgres
+
+    networks:
+      - pm_net
+networks:
+  pm_net:
+
+volumes:
+  pm_volume:
+
+
