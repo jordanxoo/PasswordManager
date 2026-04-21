@@ -8,11 +8,8 @@ origins = ["http://localhost:5173"]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    yield    
-
+   yield
+   
 app = FastAPI(title = "Password Manager",lifespan=lifespan)
 
 app.add_middleware(CORSMiddleware,allow_origins=origins,allow_methods=["*"],allow_credentials= True,allow_headers=["*"])

@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -41,6 +39,29 @@ services:
       - pm_net
 
 
+  migrator:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}          
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_TOKEN: ${JWT_REFRESH_TOKEN}                                                
+      ARGON2_TIME_COST: ${ARGON2_TIME_COST:-3}
+      ARGON2_MEMORY_COST: ${ARGON2_MEMORY_COST:-65536}                                       
+      POSTGRES_USER: ${POSTGRES_USER:-pm}                                                    
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pmpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-pm_db}                 
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - pm_net
+    
+
+
   backend:
     build:
       context: ./backend
@@ -52,15 +73,21 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}          
       JWT_SECRET: ${JWT_SECRET}
-      JWT_REFRESH_TOKEN: ${JWT_REFRESH_TOKEN}
+      JWT_REFRESH_TOKEN: ${JWT_REFRESH_TOKEN}                                                
       ARGON2_TIME_COST: ${ARGON2_TIME_COST:-3}
-      ARGON2_MEMORY_COST: ${ARGON2_MEMORY_COST:-65536}
+      ARGON2_MEMORY_COST: ${ARGON2_MEMORY_COST:-65536}                                       
+      POSTGRES_USER: ${POSTGRES_USER:-pm}                                                    
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pmpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-pm_db}  
 
     volumes:
       - ./backend:/app
     
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
 
     networks:
       - pm_net
