@@ -107,7 +107,7 @@ async def refresh_access_token(db,token):
     return {"access_token" : new_jwt}
     
 
-async def logout(db, token):
+async def logout(db,redis,token,access_token):
     
     result = await db.execute(select(RefreshToken).where(RefreshToken.token ==token)) 
 
@@ -120,5 +120,11 @@ async def logout(db, token):
 
     await db.delete(token_db)
     await db.commit()
+
+    await redis.setex(
+        f"blacklist:{access_token}",
+        900,
+        "1"
+    )
 
     return {"message" : "logged out"}

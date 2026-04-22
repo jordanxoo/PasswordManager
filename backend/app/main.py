@@ -4,6 +4,7 @@ from app.routers import auth,vault
 from app.database import engine,Base
 from app import models
 from contextlib import asynccontextmanager
+from app.middleware.rate_limiter import rate_limit_middleware
 origins = ["http://localhost:5173"]
 
 @asynccontextmanager
@@ -13,7 +14,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title = "Password Manager",lifespan=lifespan)
 
 app.add_middleware(CORSMiddleware,allow_origins=origins,allow_methods=["*"],allow_credentials= True,allow_headers=["*"])
-
+app.middleware("http")(rate_limit_middleware)
 app.include_router(auth.router,prefix="/auth",tags=["auth"])
 app.include_router(vault.router,prefix="/vault",tags=["vault"])
 
