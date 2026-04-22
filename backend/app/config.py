@@ -17,7 +17,8 @@ class Settings(BaseSettings):
       POSTGRES_DB: str
       JWT_REFRESH_TOKEN: str
       ARGON2_TIME_COST: int = 3
-      ARGON2_MEMORY_COST: int = 65536                                                      
+      ARGON2_MEMORY_COST: int = 65536
+      REDIS_URL: str                                                      
    
 settings = Settings()                                                                    
                   

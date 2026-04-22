@@ -11,7 +11,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-pm_db}
 
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pm}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pm} -d ${POSTGRES_DB:-pm_db}"]
       interval: 1m30s
       timeout: 30s
       retries: 5
@@ -52,7 +52,8 @@ services:
       ARGON2_MEMORY_COST: ${ARGON2_MEMORY_COST:-65536}                                       
       POSTGRES_USER: ${POSTGRES_USER:-pm}                                                    
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pmpassword}
-      POSTGRES_DB: ${POSTGRES_DB:-pm_db}                 
+      POSTGRES_DB: ${POSTGRES_DB:-pm_db}           
+      REDIS_URL: redis://redis:6379      
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,7 +61,19 @@ services:
     networks:
       - pm_net
     
-
+  redis:
+    image: redis:7-alpine
+    container_name: pm_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli","--raw","incr","ping"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    networks:
+      - pm_net
 
   backend:
     build:
@@ -79,6 +92,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-pm}                                                    
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pmpassword}
       POSTGRES_DB: ${POSTGRES_DB:-pm_db}  
+      REDIS_URL: redis://redis:6379
 
     volumes:
       - ./backend:/app
@@ -88,6 +102,8 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
     networks:
       - pm_net
