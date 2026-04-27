@@ -44,6 +44,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     command: alembic upgrade head
+    volumes:
+      - ./backend:/app
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}          
       JWT_SECRET: ${JWT_SECRET}
