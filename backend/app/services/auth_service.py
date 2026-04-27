@@ -1,5 +1,5 @@
 from argon2 import PasswordHasher
-from sqlalchemy import select,delete
+from sqlalchemy import select
 import logging
 from jose import jwt
 from datetime import datetime,timedelta
@@ -42,9 +42,14 @@ async def register_user(db,email,password,salt):
         raise HTTPException(status_code=500,detail="Database error")
 
 
-async def login_user(db,email,password):
-    result = await db.execute(select(User).where(User.email == email))
+async def login_user(db,redis,email,password):
 
+    failed = await redis.get(f"failed_login:{email}")
+
+    if failed is not None and int(failed) >= 10:
+        raise HTTPException(status_code=429,detail="Account temporarily locked")
+
+    result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -70,23 +75,34 @@ async def login_user(db,email,password):
 
         db.add(refresh_token_record)
         await db.commit()
-
-
-        return {"access_token" : jwt_token,
-                "refresh_token": refresh_token, 
-                "salt" : user.salt}
-    
     except VerifyMismatchError:
+        await redis.incr(f"failed_login:{email}")
+        await redis.expire(f"failed_login:{email}",900)
         raise HTTPException(status_code=401,detail="Invalid credentials")
     except Exception as e:
         logger.error("Verification error: %s",e)
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+    await redis.delete(f"failed_login:{email}")
+    await redis.setex(f"refresh:{refresh_token}",604800,str(user.id))
+
+    return {"access_token" : jwt_token,
+            "refresh_token": refresh_token, 
+            "salt" : user.salt}
 
 
-async def refresh_access_token(db,token):
+async def refresh_access_token(db,token,redis):
+
+    cached_user_id = await redis.get(f"refresh:{token}")
+    if cached_user_id:
+        payload = {
+            "sub": cached_user_id,
+            "exp": datetime.now() + timedelta(minutes=15)
+        }
+
+        return {"access_token": jwt.encode(payload,settings.JWT_SECRET,algorithm="HS256")}
 
     result = await db.execute(select(RefreshToken).where(RefreshToken.token == token))
-
     token_db = result.scalar_one_or_none()
 
     if token_db is None:
@@ -120,6 +136,7 @@ async def logout(db,redis,token,access_token):
 
     await db.delete(token_db)
     await db.commit()
+    await redis.delete(f"refresh:{token}")
 
     await redis.setex(
         f"blacklist:{access_token}",
@@ -128,3 +145,19 @@ async def logout(db,redis,token,access_token):
     )
 
     return {"message" : "logged out"}
+
+
+async def get_salt(db,email,redis):
+    cached = await redis.get(f"salt:{email}")
+
+    if cached:
+        return cached
+    
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=404,detail="Not found")
+    
+    await redis.setex(f"salt:{email}",3600,user.salt)
+    return user.salt
