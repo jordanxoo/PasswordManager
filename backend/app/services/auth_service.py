@@ -88,7 +88,8 @@ async def login_user(db,redis,email,password):
 
     return {"access_token" : jwt_token,
             "refresh_token": refresh_token, 
-            "salt" : user.salt}
+            "salt" : user.salt,
+            "user_id": str(user.id)}
 
 
 async def refresh_access_token(db,token,redis):
