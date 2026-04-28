@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth,vault
+from app.routers import auth,vault,audit
 from app.database import engine,Base
 from app import models
 from contextlib import asynccontextmanager
@@ -17,7 +17,7 @@ app.add_middleware(CORSMiddleware,allow_origins=origins,allow_methods=["*"],allo
 app.middleware("http")(rate_limit_middleware)
 app.include_router(auth.router,prefix="/auth",tags=["auth"])
 app.include_router(vault.router,prefix="/vault",tags=["vault"])
-
+app.include_router(audit.router,prefix="/audit",tags=["audit"])
 @app.get("/health")
 async def health():
     return {"status" : "ok"}

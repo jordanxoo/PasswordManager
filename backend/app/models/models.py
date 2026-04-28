@@ -1,8 +1,10 @@
-from sqlalchemy import Column,String,DateTime,ForeignKey
+from sqlalchemy import Column,String,DateTime,ForeignKey,JSON
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import uuid4
 from datetime import datetime
 from app.database import Base
+from app.models.enums import EventType
+import sqlalchemy as sa
 
 
 class User(Base):
@@ -33,3 +35,14 @@ class RefreshToken(Base):
     user_id = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=False)
     token = Column(String,nullable=False)
     expires_at = Column(DateTime,nullable=False)
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
+    user_id = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=True)
+    ip_address = Column(String,nullable=True)
+    user_agent = Column(String,nullable=True)
+    event_type = Column(sa.Enum(EventType),nullable=False)
+    event_metadata = Column(JSON,nullable=True)
+    created_at = Column(DateTime,default=datetime.now)

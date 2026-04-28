@@ -38,7 +38,12 @@ async def login(data: LoginRequest,
             await log_event(db,EventType.LOGIN_FAILED,
                             request.client.host,
                             request.headers.get("user-agent"))
-        raise
+        
+        elif e.status_code == 429:
+            await log_event(db,EventType.ACCOUNT_LOCKED,request.client.host,request.headers.get("user-agent"))
+
+        raise 
+        
 
     
     response.set_cookie(
