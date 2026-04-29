@@ -27,3 +27,9 @@ class AuditLogFilter(BaseModel):
     ip_address: Optional[str] = None
     limit: int = 50
     offset: int = 0
+
+class AuditLogStats(BaseModel):
+    total_events: int
+    failed_logins_24: int
+    locked_accounts_24: int
+    unique_ips: int

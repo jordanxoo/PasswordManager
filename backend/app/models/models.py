@@ -46,3 +46,4 @@ class AuditLog(Base):
     event_type = Column(sa.Enum(EventType),nullable=False)
     event_metadata = Column(JSON,nullable=True)
     created_at = Column(DateTime,default=datetime.now)
+
