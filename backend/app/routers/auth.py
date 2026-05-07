@@ -9,6 +9,7 @@ from app.services.audit_service import log_event
 from app.models.enums import EventType
 from jose import jwt
 from app.config import settings
+from app.publishers.security_publisher import publish_security_alert,check_and_publish_suspicious_login
 
 router = APIRouter()
 
@@ -33,6 +34,7 @@ async def login(data: LoginRequest,
                 redis = Depends(get_redis)):
     try:
         result = await login_user(db,redis,data.email,data.password)
+      
     except HTTPException as e:
         if e.status_code == 401:
             await log_event(db,EventType.LOGIN_FAILED,
@@ -41,7 +43,7 @@ async def login(data: LoginRequest,
         
         elif e.status_code == 429:
             await log_event(db,EventType.ACCOUNT_LOCKED,request.client.host,request.headers.get("user-agent"))
-
+            await publish_security_alert("account_locked",data.email,request.client.host)
         raise 
         
 
@@ -55,7 +57,7 @@ async def login(data: LoginRequest,
     )
     await log_event(db,EventType.LOGIN_SUCCESS,request.client.host,
                     request.headers.get("user-agent"),user_id=result["user_id"])
-
+    await check_and_publish_suspicious_login(redis, data.email,request.client.host,result["user_id"])
     return LoginResponse(
         access_token=result["access_token"],
         token_type="bearer",

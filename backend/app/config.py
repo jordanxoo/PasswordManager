@@ -18,7 +18,8 @@ class Settings(BaseSettings):
       JWT_REFRESH_TOKEN: str
       ARGON2_TIME_COST: int = 3
       ARGON2_MEMORY_COST: int = 65536
-      REDIS_URL: str                                                      
+      REDIS_URL: str  
+      RABBITMQ_URL: str                                                    
    
 settings = Settings()                                                                    
                   

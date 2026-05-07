@@ -14,3 +14,5 @@ async def get_redis():
 
     finally:
         await client.aclose()
+
+

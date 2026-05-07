@@ -1,17 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth,vault,audit
-from app.database import engine,Base
-from app import models
+from app.rabbitmq_client import connect_rabbitmq,disconnect_rabbitmq,setup_rabbitmq
 from contextlib import asynccontextmanager
 from app.middleware.rate_limiter import rate_limit_middleware
-from starlette.middleware.base import BaseHTTPMiddleware
 from app.middleware.security_headers import security_headers_middleware
 origins = ["http://localhost:5173"]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+   await connect_rabbitmq()
+   await setup_rabbitmq()
    yield
+   await disconnect_rabbitmq()
    
 app = FastAPI(title = "Password Manager",lifespan=lifespan)
 
