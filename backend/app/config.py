@@ -19,7 +19,9 @@ class Settings(BaseSettings):
       ARGON2_TIME_COST: int = 3
       ARGON2_MEMORY_COST: int = 65536
       REDIS_URL: str  
-      RABBITMQ_URL: str                                                    
+      RABBITMQ_URL: str
+      MAILHOG_HOST: str = "mailhog"
+      MAILHOG_PORT: int = 1025                                                    
    
 settings = Settings()                                                                    
                   

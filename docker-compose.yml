@@ -103,6 +103,33 @@ services:
     networks:
       - pm_net
 
+  worker:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python -m app.worker
+    volumes:
+      - ./backend:/app
+    environment:                                                                           
+      DATABASE_URL:    
+        postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}          
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_TOKEN: ${JWT_REFRESH_TOKEN}                                              
+      ARGON2_TIME_COST: ${ARGON2_TIME_COST:-3}
+      ARGON2_MEMORY_COST: ${ARGON2_MEMORY_COST:-65536}                                     
+      POSTGRES_USER: ${POSTGRES_USER:-pm}                                                  
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pmpassword}                                  
+      POSTGRES_DB: ${POSTGRES_DB:-pm_db}                                                   
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/                                      
+      MAILHOG_HOST: mailhog                                                                
+      MAILHOG_PORT: 1025
+    depends_on:                                                                            
+      rabbitmq:                                                                            
+        condition: service_healthy
+    networks:                                                                              
+      - pm_net    
+
   backend:
     build:
       context: ./backend
