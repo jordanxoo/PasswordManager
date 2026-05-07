@@ -6,6 +6,7 @@ from  app.schemas.vault import VaultCreate,VaultResponse,VaultUpdate
 from sqlalchemy.ext.asyncio import  AsyncSession
 from uuid import UUID
 from app.services.audit_service import log_event,EventType
+from app.publishers.vault_publisher import publish_vault_event
 router = APIRouter()
 
 @router.get("/",response_model=list[VaultResponse])
@@ -13,6 +14,7 @@ async def get_vaults_endpoint(request: Request,
     db: AsyncSession = Depends(get_db),
                      user_id: str = Depends(get_current_user)):    
     result =  await get_vaults(db,user_id)
+    await publish_vault_event("read",user_id)
     await log_event(db,EventType.VAULT_READ,request.client.host,
                     request.headers.get("user-agent"),user_id)
     return result
@@ -25,7 +27,7 @@ async def create_vault_endpoint(
     user_id: str = Depends(get_current_user)):
 
     result = await create_vault(db,user_id,data)
-
+    await publish_vault_event("create",user_id,str(result.id))
     await log_event(db,EventType.VAULT_CREATE,request.client.host,
                     request.headers.get("user-agent"),user_id)
 
@@ -40,7 +42,7 @@ async def update_vault_endpoint(
     user_id: str = Depends(get_current_user)):
 
     result =  await update_vault(db,user_id,vault_id,data)    
-    
+    await publish_vault_event("update",user_id,str(id))
     await log_event(db,EventType.VAULT_UPDATE,request.client.host,
                     request.headers.get("user-agent"),user_id,metadata={"vault_id":str(vault_id)}
     )
@@ -54,7 +56,7 @@ async def delete_vault_endpoint(
     user_id: str = Depends(get_current_user)):
 
     result =  await delete_vault(db,user_id,vault_id)   
-
+    await publish_vault_event("delete",user_id,str(id))
     await log_event(db,EventType.VAULT_DELETE,request.client.host,
                     request.headers.get("user-agent"),user_id,metadata={"vault_id": str(vault_id)})
     

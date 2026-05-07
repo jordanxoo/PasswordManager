@@ -6,6 +6,7 @@ from datetime import datetime,timedelta
 from app.models.models import AuditLog
 from fastapi import HTTPException
 import json
+from app.publishers.audit_publisher import publish_audit_event
 logger = logging.getLogger(__name__)
 
 
@@ -27,6 +28,13 @@ async def log_event(db
     try:
         db.add(audit_log)
         await db.commit()
+        await publish_audit_event(
+            event_type.value,
+            ip_address,
+            user_agent,
+            user_id,
+            metadata
+        )
 
     except Exception as e:
         logger.error("Error saving auditLog for user logging")

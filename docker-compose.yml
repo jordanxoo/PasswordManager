@@ -93,6 +93,16 @@ services:
     networks:
       - pm_net
 
+  mailhog:
+    image: mailhog/mailhog
+    container_name: pm_mailhog
+    ports:
+      - "1025:1025" #SMTP
+      - "8025:8025" # WEB UI
+
+    networks:
+      - pm_net
+
   backend:
     build:
       context: ./backend
