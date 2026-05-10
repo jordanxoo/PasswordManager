@@ -12,5 +12,12 @@ class EventType(enum.Enum):
     VAULT_CREATE = "vault_create"
     VAULT_UPDATE = "vault_update"
     VAULT_DELETE =  "vault_delete"
+    TWO_FA_ENABLED = "two_fa_enabled"
+    TWO_FA_DISABLED = "two_fa_disabled"
+    TWO_FA_FAILED = "two_fa_failed"
+    TWO_FA_SUCCESS = "two_fa_success"
 
 
+class Role(enum.Enum):
+    USER = "user"
+    ADMIN = "admin"

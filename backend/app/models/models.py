@@ -1,9 +1,9 @@
-from sqlalchemy import Column,String,DateTime,ForeignKey,JSON
+from sqlalchemy import Column,String,DateTime,ForeignKey,JSON, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import uuid4
 from datetime import datetime
 from app.database import Base
-from app.models.enums import EventType
+from app.models.enums import EventType,Role
 import sqlalchemy as sa
 
 
@@ -15,6 +15,10 @@ class User(Base):
     password = Column(String,nullable=False)
     salt = Column(String,nullable=False)
     created_at = Column(DateTime,default=datetime.now)
+    totp_secret = Column(String,nullable=True)
+    totp_enabled = Column(Boolean,nullable=False)
+    role = Column(sa.Enum(Role),nullable=False,default=Role.USER)
+    is_blocked = Column(Boolean,default=False)
 
 class Vault(Base):
     __tablename__ = "vaults"

@@ -7,6 +7,9 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.redis_client import get_redis
+from app.models import User
+from sqlalchemy import select
+from app.models.enums import Role
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 logger = logging.getLogger(__name__)
 
@@ -33,3 +36,15 @@ async def get_current_user(token: str = Depends(oauth2_scheme),
         logger.error("Error with JWT: %s",e)
         raise HTTPException(status_code=401,detail="Invalid Token")
         
+
+async def require_admin(user_id: str = Depends(get_current_user),
+                        db: AsyncSession = Depends(get_db)):
+    
+    result = await db.execute(select(User).where(User.id == user_id))
+
+    user = result.scalar_one_or_none()
+
+    if user is None or user.role != Role.ADMIN:
+        raise HTTPException(status_code=403,detail="Admin access required")
+    
+    return user_id

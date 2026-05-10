@@ -10,6 +10,17 @@ from app.models.enums import EventType
 from jose import jwt
 from app.config import settings
 from app.publishers.security_publisher import publish_security_alert,check_and_publish_suspicious_login
+from app.services.auth_service import (                                                  
+      register_user, login_user, logout, refresh_access_token,                             
+      get_salt, setup_2fa, verify_2fa_setup, disable_2fa, validate_2fa_code
+  )                                                                                        
+from app.schemas.auth import (
+    RegisterRequest, LoginRequest, LoginResponse,                                        
+    TwoFactorSetupResponse, TwoFactorVerifyRequest, TwoFactorValidateRequest
+)
+from app.dependencies import get_current_user
+from app.models import User
+from sqlalchemy import select
 
 router = APIRouter()
 
@@ -26,7 +37,7 @@ async def register(data: RegisterRequest,
     return {"message" : "registered successfully"}
 
 
-@router.post("/login", response_model= LoginResponse)
+@router.post("/login")
 async def login(data: LoginRequest,
                 response: Response,
                 request: Request,
@@ -34,7 +45,8 @@ async def login(data: LoginRequest,
                 redis = Depends(get_redis)):
     try:
         result = await login_user(db,redis,data.email,data.password)
-      
+        if result.get("requires_2fa"):
+            return {"requires_2fa": True, "pending_token":result["pending_token"]}
     except HTTPException as e:
         if e.status_code == 401:
             await log_event(db,EventType.LOGIN_FAILED,
@@ -103,3 +115,53 @@ async def salt_endpoint(email: str,
                         redis = Depends(get_redis)):
     salt = await get_salt(db,email,redis)
     return {"salt" : salt}
+
+
+@router.post("/2fa/setup")
+async def setup_2fa_endpoint(db: AsyncSession = Depends(get_db),                         
+                            user_id: str = Depends(get_current_user)):
+    return await setup_2fa(db, user_id)                                                  
+                                                                                        
+                                                                                        
+@router.post("/2fa/verify")
+async def verify_2fa_endpoint(data: TwoFactorVerifyRequest,                              
+                                request: Request,           
+                                db: AsyncSession = Depends(get_db),                       
+                                user_id: str = Depends(get_current_user)):
+    result = await verify_2fa_setup(db, user_id, data.code)                              
+    await log_event(db, EventType.TWO_FA_ENABLED, request.client.host,
+                    request.headers.get("user-agent"), user_id)                                              
+    return result                          
+                            
+
+                                                                                    
+@router.post("/2fa/disable")                                                             
+async def disable_2fa_endpoint(data: TwoFactorVerifyRequest,
+                                request: Request,                                        
+                                db: AsyncSession = Depends(get_db),
+                                user_id: str = Depends(get_current_user)):
+    result = await disable_2fa(db, user_id, data.code)                                   
+    user = (await db.execute(select(User).where(User.id ==
+            user_id))).scalar_one_or_none()                                                          
+    await log_event(db, EventType.TWO_FA_DISABLED, request.client.host,                  
+                    request.headers.get("user-agent"), user_id)
+    await publish_security_alert("2fa_disabled", user.email, request.client.host,        
+                                user_id)        
+    return result                                                           
+                                                                                    
+
+@router.post("/2fa/validate")
+async def validate_2fa_endpoint(data: TwoFactorValidateRequest,
+                                response: Response,                                     
+                                request: Request,  
+                                db: AsyncSession = Depends(get_db),                     
+                                redis=Depends(get_redis)):         
+    result = await validate_2fa_code(db, redis, data.pending_token, data.code)           
+    response.set_cookie(key="refresh_token", value=result["refresh_token"],   
+                        httponly=True, secure=True, samesite="lax")                      
+    await log_event(db, EventType.TWO_FA_SUCCESS, request.client.host,                   
+                    request.headers.get("user-agent"), result["user_id"])                
+    await check_and_publish_suspicious_login(redis, result["email"],                     
+                                            request.client.host, result["user_id"])     
+    return LoginResponse(access_token=result["access_token"], token_type="bearer",       
+salt=result["salt"])

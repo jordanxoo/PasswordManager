@@ -12,4 +12,4 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"  
     response.headers["Cache-Control"] = "no-store"                                           
 
-    return responsetak,
+    return response
