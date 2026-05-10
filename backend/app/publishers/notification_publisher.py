@@ -29,3 +29,10 @@ async def publish_suspicious_login_email(email: str, ip: str):
         subject="Logowanie z nowego urządzenia",
         body=f"Wykryto logowanie z nowego adresu IP: {ip}. Jeśli to nie byłeś Ty, zmień hasło."                                                                                  
     )                     
+
+async def publish_expiry_reminder(email: str, vault_name: str, expires_at: str):         
+    await publish_email(                                                                 
+        to=email,                                                                        
+        subject="Hasło wygasa wkrótce",                                                  
+        body=f"Wpis '{vault_name}' wygasa {expires_at}. Zaloguj się i zaktualizuj hasło."
+    )            
