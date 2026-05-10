@@ -21,6 +21,7 @@ async def create_vault(db,user_id,data):
         url = data.url,
         encrypted = data.encrypted,
         iv = data.iv,
+        expires_at = data.expires_at,
     )
 
     db.add(vault)
@@ -46,7 +47,7 @@ async def update_vault(db,user_id,vault_id,data):
     vault.encrypted = data.encrypted
     vault.iv = data.iv
     vault.updated_at = datetime.now()
-
+    vault.expires_at = data.expires_at
     await db.commit()
     await db.refresh(vault)
     return vault

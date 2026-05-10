@@ -31,6 +31,7 @@ class Vault(Base):
     iv = Column(String,nullable=False)
     created_at = Column(DateTime,default= datetime.now)
     updated_at = Column(DateTime,default=datetime.now)
+    expires_at = Column(DateTime,nullable=True)
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
