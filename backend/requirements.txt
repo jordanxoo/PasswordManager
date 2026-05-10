@@ -16,3 +16,5 @@ redis==7.4.0
 aio-pika==9.6.2
 rabbitmq==0.2.0
 aiosmtplib==5.1.0
+pyotp==2.9.0
+qrcode[pil]==8.2
