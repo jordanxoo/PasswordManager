@@ -21,3 +21,18 @@ class EventType(enum.Enum):
 class Role(enum.Enum):
     USER = "user"
     ADMIN = "admin"
+
+
+class Category(enum.Enum):
+    SOCIAL = "social"
+    WORK = "work"
+    FINANCE = "finance"
+    EMAIL = "email"
+    OTHER = "other"
+
+class ProfileEvents(enum.Enum):
+    EMAIL_CHANGED = "email_changed"
+    PASSWORD_CHANGED = "password_changed"
+    ACCOUNT_DELETED = "account_deleted"
+    SESSION_REVOKED = "session_revoked"
+    

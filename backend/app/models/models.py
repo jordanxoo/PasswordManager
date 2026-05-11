@@ -3,7 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from uuid import uuid4
 from datetime import datetime
 from app.database import Base
-from app.models.enums import EventType,Role
+from app.models.enums import EventType,Role,Category
 import sqlalchemy as sa
 
 
@@ -32,6 +32,7 @@ class Vault(Base):
     created_at = Column(DateTime,default= datetime.now)
     updated_at = Column(DateTime,default=datetime.now)
     expires_at = Column(DateTime,nullable=True)
+    category = Column(sa.Enum(Category),nullable=True)
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
