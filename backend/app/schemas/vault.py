@@ -2,13 +2,14 @@ from pydantic import BaseModel,ConfigDict
 from datetime import datetime
 from uuid import UUID
 from typing import Optional
-
+from app.models.enums import Category
 class VaultCreate(BaseModel):
     name: str
     url: str
     encrypted: str
     iv: str
     expires_at: Optional[datetime] = None
+    category: Optional[Category] = None
 
 class VaultUpdate(BaseModel):
     name: str
@@ -16,7 +17,7 @@ class VaultUpdate(BaseModel):
     encrypted: str
     iv: str
     expires_at: Optional[datetime] = None
-
+    category: Optional[Category] = None
 class VaultResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     name: str
@@ -27,3 +28,4 @@ class VaultResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     expires_at: Optional[datetime] = None
+    category: Optional[Category] = None

@@ -3,16 +3,19 @@ from fastapi import HTTPException
 from app.models.models import Vault
 import logging
 from datetime import datetime
-
+from app.models.enums import Category
 logger = logging.getLogger(__name__)
 
-async def get_vaults(db,user_id):
+async def get_vaults(db,user_id,category = None):
     
-    result = await db.execute(select(Vault).where(Vault.user_id == user_id))
-    vaults = result.scalars().all()
-    return vaults
+    query = select(Vault).where(Vault.user_id == user_id)
+    
+    if category:
+        query = query.where(Vault.category == category)
+    
+    result = await db.execute(query)
 
-
+    return result.scalars().all()
 async def create_vault(db,user_id,data):
 
     vault = Vault(
@@ -22,6 +25,7 @@ async def create_vault(db,user_id,data):
         encrypted = data.encrypted,
         iv = data.iv,
         expires_at = data.expires_at,
+        category = data.category
     )
 
     db.add(vault)
@@ -48,6 +52,7 @@ async def update_vault(db,user_id,vault_id,data):
     vault.iv = data.iv
     vault.updated_at = datetime.now()
     vault.expires_at = data.expires_at
+    vault.category = data.category
     await db.commit()
     await db.refresh(vault)
     return vault
