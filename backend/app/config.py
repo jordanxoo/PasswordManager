@@ -21,7 +21,8 @@ class Settings(BaseSettings):
       REDIS_URL: str  
       RABBITMQ_URL: str
       MAILHOG_HOST: str = "mailhog"
-      MAILHOG_PORT: int = 1025                                                    
+      MAILHOG_PORT: int = 1025     
+      HIBP_API_KEY: str = ""                                               
    
 settings = Settings()                                                                    
                   

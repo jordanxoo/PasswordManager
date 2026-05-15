@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth,vault,audit,admin,profile,generator
+from app.routers import auth,vault,audit,admin,profile,generator,hibp
 from app.rabbitmq_client import connect_rabbitmq,disconnect_rabbitmq,setup_rabbitmq
 from contextlib import asynccontextmanager
 from app.middleware.rate_limiter import rate_limit_middleware
@@ -26,6 +26,7 @@ app.include_router(audit.router,prefix="/audit",tags=["audit"])
 app.include_router(admin.router,prefix="/admin",tags=["admin"])
 app.include_router(profile.router,prefix="/profile",tags=["profile"])
 app.include_router(generator.router,prefix="/generator",tags=["generator"])
+app.include_router(hibp.router,prefix="/hibp",tags=["hibp"])
 @app.get("/health")
 async def health():
     return {"status" : "ok"}
