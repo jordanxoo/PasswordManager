@@ -5,7 +5,7 @@ from app.rabbitmq_client import connect_rabbitmq,disconnect_rabbitmq,setup_rabbi
 from contextlib import asynccontextmanager
 from app.middleware.rate_limiter import rate_limit_middleware
 from app.middleware.security_headers import security_headers_middleware
-
+from prometheus_fastapi_instrumentator import Instrumentator
 origins = ["http://localhost:5173"]
 
 @asynccontextmanager
@@ -16,6 +16,7 @@ async def lifespan(app: FastAPI):
    await disconnect_rabbitmq()
    
 app = FastAPI(title = "Password Manager",lifespan=lifespan)
+Instrumentator().instrument(app).expose(app)
 
 app.add_middleware(CORSMiddleware,allow_origins=origins,allow_methods=["*"],allow_credentials= True,allow_headers=["*"])
 app.middleware("http")(rate_limit_middleware)

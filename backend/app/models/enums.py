@@ -24,6 +24,9 @@ class EventType(enum.Enum):
     ACCOUNT_DELETED = "account_deleted"
     SESSION_REVOKED = "session_revoked"
 
+    HIBP_PASSWORD_CHECK = "hibp_password_check"
+    HIBP_EMAIl_CHECK = "hibp_email_check"
+
 
 class Role(enum.Enum):
     USER = "user"

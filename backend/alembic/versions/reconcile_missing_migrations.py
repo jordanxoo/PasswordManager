@@ -22,4 +22,3 @@ def upgrade():
 def downgrade():
     op.execute("ALTER TABLE vaults DROP COLUMN IF EXISTS category")
     op.execute("DROP TYPE IF EXISTS category")
-

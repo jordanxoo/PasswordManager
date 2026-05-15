@@ -4,6 +4,7 @@ from app.models.models import Vault
 import logging
 from datetime import datetime
 from app.models.enums import Category
+from app.metrics import vault_operations_total
 logger = logging.getLogger(__name__)
 
 async def get_vaults(db,user_id,category = None):
@@ -14,7 +15,7 @@ async def get_vaults(db,user_id,category = None):
         query = query.where(Vault.category == category)
     
     result = await db.execute(query)
-
+    vault_operations_total.labels("read").inc()
     return result.scalars().all()
 async def create_vault(db,user_id,data):
 
@@ -31,6 +32,7 @@ async def create_vault(db,user_id,data):
     db.add(vault)
     await db.commit()
     await db.refresh(vault)
+    vault_operations_total.labels("create").inc()
     return vault
 
 async def update_vault(db,user_id,vault_id,data):
@@ -55,6 +57,7 @@ async def update_vault(db,user_id,vault_id,data):
     vault.category = data.category
     await db.commit()
     await db.refresh(vault)
+    vault_operations_total.labels("update").inc()
     return vault
     
 
@@ -73,7 +76,7 @@ async def delete_vault(db,user_id,vault_id):
     
     await db.delete(vault)
     await db.commit()
-
+    vault_operations_total.labels("delete").inc()
     return {
         "message":"deleted"
     }

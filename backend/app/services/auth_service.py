@@ -12,6 +12,7 @@ import pyotp
 import qrcode
 import io
 import base64
+from app.metrics import login_failures_total
 
 logger = logging.getLogger(__name__)
 ph = PasswordHasher(time_cost = settings.ARGON2_TIME_COST,
@@ -84,6 +85,7 @@ async def login_user(db,redis,email,password):
     except VerifyMismatchError:
         await redis.incr(f"failed_login:{email}")
         await redis.expire(f"failed_login:{email}",900)
+        login_failures_total.inc()
         raise HTTPException(status_code=401,detail="Invalid credentials")
     except Exception as e:
         logger.error("Verification error: %s",e)
