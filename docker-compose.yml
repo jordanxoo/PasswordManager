@@ -130,6 +130,19 @@ services:
     networks:                                                                              
       - pm_net    
 
+
+  postgres-test:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: pm_admin
+      POSTGRES_PASSWORD: pm_admin
+      POSTGRES_DB: pm_db_test
+    ports:
+      - "5433:5432"
+
+    networks:
+      - pm_net
+
   backend:
     build:
       context: ./backend

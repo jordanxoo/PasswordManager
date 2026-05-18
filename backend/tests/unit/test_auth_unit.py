@@ -23,26 +23,27 @@ async def test_register_new_user(mock_db):
     mock_db.commit.assert_called()
 
 
-async def test_login_not_existing_user(mock_db):
+async def test_login_not_existing_user(mock_db,mock_redis):
     
     mock_db.execute.return_value.scalar_one_or_none.return_value = None
 
     with pytest.raises(HTTPException) as exc:
-        await login_user(mock_db,"test@test.com","password123")
+        await login_user(mock_db,mock_redis,"test@test.com","password123")
 
     assert exc.value.status_code == 401
 
 
 
-async def test_login_wrong_password(mock_db):
+async def test_login_wrong_password(mock_db,mock_redis):
     
     mock_user = MagicMock()
     mock_user.password = "hashed_password"
+    mock_user.is_blocked = False
     mock_db.execute.return_value.scalar_one_or_none.return_value = mock_user
 
     with patch("argon2.PasswordHasher.verify",side_effect = VerifyMismatchError):
         with pytest.raises(HTTPException) as exc:
-            await login_user(mock_db,"test@test.com","wrong_password")
+            await login_user(mock_db,mock_redis,"test@test.com","wrong_password")
 
     assert exc.value.status_code == 401
 
