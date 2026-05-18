@@ -16,3 +16,11 @@ async def get_redis():
         await client.aclose()
 
 
+def create_redis_client():
+    return ioredis.from_url(
+        settings.REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True
+    )
+
+

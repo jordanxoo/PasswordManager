@@ -16,7 +16,7 @@ class User(Base):
     salt = Column(String,nullable=False)
     created_at = Column(DateTime,default=datetime.now)
     totp_secret = Column(String,nullable=True)
-    totp_enabled = Column(Boolean,nullable=False)
+    totp_enabled = Column(Boolean,nullable=False,default=False)
     role = Column(sa.Enum(Role),nullable=False,default=Role.USER)
     is_blocked = Column(Boolean,default=False)
 

@@ -19,3 +19,4 @@ aiosmtplib==5.1.0
 pyotp==2.9.0
 qrcode[pil]==8.2
 prometheus-fastapi-instrumentator==7.1.0
+websockets==16.0
