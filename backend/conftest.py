@@ -30,6 +30,16 @@ def mock_redis():
     r.publish.return_value = 1
     return r
 
+@pytest.fixture(scope="session")
+async def engine():
+    eng = create_async_engine(TEST_DB_URL)
+    async with eng.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield eng
+    async with eng.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await eng.dispose()
+
 @pytest.fixture
 async def db():
     engine = create_async_engine(TEST_DB_URL)
@@ -38,9 +48,10 @@ async def db():
 
     async with AsyncSession(engine, expire_on_commit=False) as session:
         yield session
+        for table in reversed(Base.metadata.sorted_tables):
+            await session.execute(table.delete())
+        await session.commit()
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
 
 @pytest.fixture
@@ -51,14 +62,18 @@ async def client(db, mock_redis):
     async def override_get_redis():
         yield mock_redis
 
+    async def fake_rate_limit_redis():
+        yield mock_redis
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_redis] = override_get_redis
 
     with patch("app.main.connect_rabbitmq", new_callable=AsyncMock), \
         patch("app.main.setup_rabbitmq", new_callable=AsyncMock), \
         patch("app.main.disconnect_rabbitmq", new_callable=AsyncMock), \
-        patch("app.main.redis_pubsub_listener", new_callable=AsyncMock):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        patch("app.main.redis_pubsub_listener", new_callable=AsyncMock), \
+        patch("app.middleware.rate_limiter.get_redis", side_effect=lambda:fake_rate_limit_redis()):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test")as ac:
             yield ac
 
     app.dependency_overrides.clear()
