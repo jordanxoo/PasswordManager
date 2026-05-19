@@ -1,0 +1,69 @@
+name: CI
+     
+on:
+    push:
+      branches: [main]
+    pull_request:
+      branches: [main]
+
+jobs:
+    test:
+      runs-on: ubuntu-latest
+
+      services:
+        postgres-test:
+          image: postgres:15
+          env:
+            POSTGRES_USER: pm_admin
+            POSTGRES_PASSWORD: pm_admin
+            POSTGRES_DB: pm_db_test
+          ports:
+            - 5433:5432
+          options: >-
+            --health-cmd pg_isready
+            --health-interval 10s
+            --health-timeout 5s
+            --health-retries 5
+
+        redis:
+          image: redis:7
+          ports:
+            - 6379:6379
+          options: >-
+            --health-cmd "redis-cli ping"
+            --health-interval 10s
+            --health-timeout 5s
+            --health-retries 5
+
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+
+        - name: Set up Python 3.12
+          uses: actions/setup-python@v5
+          with:
+            python-version: '3.12'
+
+        - name: Install dependencies
+          working-directory: backend
+          run: |
+            python -m venv .venv
+            .venv/bin/pip install -r requirements.txt
+
+        - name: Run tests
+          working-directory: backend
+          env:
+            DATABASE_URL:
+              postgresql+asyncpg://pm_admin:pm_admin@localhost:5433/pm_db_test
+            JWT_SECRET: ci_jwt_secret_not_used_in_real_env
+            JWT_REFRESH_TOKEN: ci_refresh_secret_not_used_in_real_env
+            POSTGRES_USER: pm_admin
+            POSTGRES_PASSWORD: pm_admin
+            POSTGRES_DB: pm_db_test
+            REDIS_URL: redis://localhost:6379
+            RABBITMQ_URL: amqp://guest:guest@localhost:5672/
+            ARGON2_TIME_COST: 1
+            ARGON2_MEMORY_COST: 8192
+          run: |
+            .venv/bin/python -m pytest tests/ -v
+
