@@ -9,18 +9,25 @@ from app.services.audit_service import log_event,EventType
 from app.publishers.vault_publisher import publish_vault_event
 from app.models.enums import Category
 from typing import Optional
+from app.schemas.vault import VaultCreate,VaultResponse,VaultUpdate,VaultPaginatedResponse
+
 router = APIRouter()
 
-@router.get("/",response_model=list[VaultResponse])
-async def get_vaults_endpoint(request: Request,
+@router.get("/", response_model=VaultPaginatedResponse)
+async def get_vaults_endpoint(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user),
-    category: Optional[Category] = None):    
-    result =  await get_vaults(db,user_id,category)
-    await publish_vault_event("read",user_id)
-    await log_event(db,EventType.VAULT_READ,request.client.host,
-                    request.headers.get("user-agent"),user_id)
-    return result
+    category: Optional[Category] = None,
+    cursor: Optional[str] = None,
+    limit: int = 20):
+
+    items, next_cursor, has_next = await get_vaults(db, user_id, category, cursor, limit)
+    await publish_vault_event("read", user_id)
+    await log_event(db, EventType.VAULT_READ, request.client.host,
+                    request.headers.get("user-agent"), user_id)
+    return VaultPaginatedResponse(items=items, next_cursor=next_cursor, has_next=has_next)
+
 
 @router.post("/",response_model=VaultResponse)
 async def create_vault_endpoint(

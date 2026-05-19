@@ -6,17 +6,47 @@ from datetime import datetime
 from app.models.enums import Category
 from app.metrics import vault_operations_total
 logger = logging.getLogger(__name__)
+from sqlalchemy import select,or_,and_
+import base64
+import json
+from uuid import UUID
 
-async def get_vaults(db,user_id,category = None):
-    
+async def get_vaults(db, user_id, category=None, cursor=None, limit=20):
     query = select(Vault).where(Vault.user_id == user_id)
     
     if category:
         query = query.where(Vault.category == category)
+
+    if cursor:
+        data = json.loads(base64.b64decode(cursor))
+        cursor_time = datetime.fromisoformat(data["created_at"])
+        cursor_id = UUID(data["id"])
+        query = query.where(
+            or_(
+                Vault.created_at > cursor_time,
+                and_(Vault.created_at == cursor_time, Vault.id > cursor_id)
+            )   
+        )
+
+    query = query.order_by(Vault.created_at.asc(), Vault.id.asc()).limit(limit + 1)
     
     result = await db.execute(query)
+    vaults = result.scalars().all()
+    
+    has_next = len(vaults) > limit
+    items = list(vaults[:limit])
+
+    next_cursor = None
+    if has_next:
+        last = items[-1]
+        next_cursor = base64.b64encode(json.dumps({
+            "created_at": last.created_at.isoformat(),
+            "id": str(last.id)
+        }).encode()).decode()
+
     vault_operations_total.labels("read").inc()
-    return result.scalars().all()
+    return items, next_cursor, has_next
+
 async def create_vault(db,user_id,data):
 
     vault = Vault(

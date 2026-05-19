@@ -10,10 +10,10 @@ VAULT_PAYLOAD = {
     "iv": "test_iv123"
 }
 
-async def test_get_vaults_empty(client,auth_headers):
-    response = await client.get("/vault/",headers=auth_headers)
+async def test_get_vaults_empty(client, auth_headers):
+    response = await client.get("/vault/", headers=auth_headers)
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json()["items"] == []
 
 async def test_create_vault(client,auth_headers):
     response = await client.post("/vault/",json=VAULT_PAYLOAD,headers=auth_headers)
@@ -74,41 +74,39 @@ async def test_delete_vault_forbidden(client,auth_headers,db):
     response = await client.delete(f"/vault/{vault_id}",headers=auth_headers)
     assert response.status_code == 403
 
-async def test_get_vaults_returns_only_own(client,db):
-
-    await client.post("/auth/register",json = {
-        "email":"clienta@test.com",
-        "password":"clientapass",
-        "salt":"clientasalt"
+async def test_get_vaults_returns_only_own(client, db):
+    await client.post("/auth/register", json={
+        "email": "clienta@test.com",
+        "password": "clientapass",
+        "salt": "clientasalt"
     })
-
-    login_a = await client.post("/auth/login",json={
-        "email":"clienta@test.com",
-        "password":"clientapass"
+    login_a = await client.post("/auth/login", json={
+        "email": "clienta@test.com",
+        "password": "clientapass"
     })
-    headers_a = {"Authorization": f"Bearer {login_a.json()["access_token"]}"}
-    await client.post("/auth/register",json={
-        "email":"clientb@test.com",
-        "password":"clientbpass",
-        "salt":"clientbsalt"
+    headers_a = {"Authorization": f"Bearer {login_a.json()['access_token']}"}
+
+    await client.post("/auth/register", json={
+        "email": "clientb@test.com",
+        "password": "clientbpass",
+        "salt": "clientbsalt"
     })
-
-    login_b = await client.post("/auth/login",json={
-        "email":"clientb@test.com",
-        "password":"clientbpass"
+    login_b = await client.post("/auth/login", json={
+        "email": "clientb@test.com",
+        "password": "clientbpass"
     })
-    headers_b = {"Authorization": f"Bearer {login_b.json()["access_token"]}"}
+    headers_b = {"Authorization": f"Bearer {login_b.json()['access_token']}"}
 
-    await client.post("/vault/",json={**VAULT_PAYLOAD,"name":"Client A Vault"},headers=headers_a)
-    await client.post("/vault/",json = {**VAULT_PAYLOAD, "name":"Client B Vault"},headers=headers_b)
+    await client.post("/vault/", json={**VAULT_PAYLOAD, "name": "Client A Vault"},
+headers=headers_a)
+    await client.post("/vault/", json={**VAULT_PAYLOAD, "name": "Client B Vault"},
+headers=headers_b)
 
-    resp_a = await client.get("/vault/",headers=headers_a)
-    resp_b = await client.get("/vault/",headers=headers_b)
+    resp_a = await client.get("/vault/", headers=headers_a)
+    resp_b = await client.get("/vault/", headers=headers_b)
 
-    assert len(resp_a.json()) == 1
-    assert resp_a.json()[0]["name"] == "Client A Vault"
+    assert len(resp_a.json()["items"]) == 1
+    assert resp_a.json()["items"][0]["name"] == "Client A Vault"
 
-    assert len(resp_b.json()) == 1
-    assert resp_b.json()[0]["name"] == "Client B Vault"
-
-
+    assert len(resp_b.json()["items"]) == 1
+    assert resp_b.json()["items"][0]["name"] == "Client B Vault"

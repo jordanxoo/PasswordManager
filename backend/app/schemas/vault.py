@@ -29,3 +29,8 @@ class VaultResponse(BaseModel):
     updated_at: datetime
     expires_at: Optional[datetime] = None
     category: Optional[Category] = None
+
+class VaultPaginatedResponse(BaseModel):
+    items: list[VaultResponse]
+    next_cursor: Optional[str] = None
+    has_next: bool

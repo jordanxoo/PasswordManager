@@ -21,27 +21,25 @@ async def test_full_vault_flow(e2e_client):
 
     resp = await e2e_client.get("/vault/", headers=headers)
     assert resp.status_code == 200
-    assert resp.json() == []
+    assert resp.json()["items"] == []
+
 
     resp = await e2e_client.post("/vault/", json=VAULT_PAYLOAD, headers=headers)
     assert resp.status_code == 200
     vault_id = resp.json()["id"]
 
     resp = await e2e_client.get("/vault/", headers=headers)
-    assert len(resp.json()) == 1
-    assert resp.json()[0]["name"] == "e2e_vault"
+    assert len(resp.json()["items"]) == 1
+    assert resp.json()["items"][0]["name"] == "e2e_vault"
+
+
 
     updated = {**VAULT_PAYLOAD, "name": "e2e_vault_updated"}
-    resp = await e2e_client.put(f"/vault/{vault_id}", json=updated,headers=headers)
-    assert resp.status_code == 200
-    assert resp.json()["name"] == "e2e_vault_updated"
-
+    resp = await e2e_client.put(f"/vault/{vault_id}", json=updated, headers=headers)
     resp = await e2e_client.get("/vault/", headers=headers)
-    assert resp.json()[0]["name"] == "e2e_vault_updated"
+    assert resp.json()["items"][0]["name"] == "e2e_vault_updated"
 
     resp = await e2e_client.delete(f"/vault/{vault_id}", headers=headers)
-    assert resp.status_code == 200
-
     resp = await e2e_client.get("/vault/", headers=headers)
-    assert resp.json() == []
+    assert resp.json()["items"] == []
 

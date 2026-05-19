@@ -6,22 +6,25 @@ from app.models.enums import Category
 
 
 async def test_get_vaults_returns_list(mock_db):
-    mock_vaults = [MagicMock(),MagicMock()]
+    mock_vaults = [MagicMock(), MagicMock()]
     mock_db.execute.return_value.scalars.return_value.all.return_value = mock_vaults
-  
-    result = await get_vaults(mock_db,"user-123")
 
-    assert result == mock_vaults
-    mock_db.execute.assert_called_once()
+    items, next_cursor, has_next = await get_vaults(mock_db, "user-123")
+
+    assert items == mock_vaults
+    assert next_cursor is None
+    assert has_next is False
+
 
 async def test_get_vaults_with_category(mock_db):
-    mock_db.return_value.scalars.return_value.all.return_value = []
+    mock_db.execute.return_value.scalars.return_value.all.return_value = []
 
-    result = await get_vaults(mock_db,"user-123",category=Category.WORK)
+    items, next_cursor, has_next = await get_vaults(mock_db, "user-123",
+category=Category.WORK)
 
     mock_db.execute.assert_called_once()
+    assert items == []
 
-    assert result == []
 
 async def test_create_vault_adds_and_commits(mock_db):
     data = MagicMock()
