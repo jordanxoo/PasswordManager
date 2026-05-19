@@ -91,3 +91,60 @@ async def auth_headers(client):
     })
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+class StatefulRedisMock:
+    def __init__(self):
+        self._store = {}
+
+    async def get(self,key):
+        return self._store.get(key)
+    
+    async def setex(self,key,ttl,value):
+        self._store[key] = value
+    
+    async def delete(self,key):
+        self._store.pop(key,None)
+
+    async def incr(self,key):
+        self._store[key] = int(self._store.get(key,0)) + 1
+        return self._store[key]
+
+    async def expire(self,key,ttl):
+        return True
+    
+    async def ttl(self,key):
+        return 60
+
+    async def publish(self,channel,message):
+        return 1
+    
+@pytest.fixture
+async def e2e_client(db):
+    stateful_redis = StatefulRedisMock()
+
+    async def override_get_db():
+        yield db
+
+    async def override_get_redis():
+        yield stateful_redis
+    
+    async def fake_rate_limit_redis():
+        yield stateful_redis
+
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_redis] = override_get_redis
+
+
+    with patch("app.main.connect_rabbitmq",new_callable=AsyncMock), \
+         patch("app.main.setup_rabbitmq",new_callable=AsyncMock), \
+         patch("app.main.disconnect_rabbitmq",new_callable=AsyncMock), \
+         patch("app.main.redis_pubsub_listener",new_callable=AsyncMock), \
+         patch("app.middleware.rate_limiter.get_redis",side_effect=lambda: 
+               fake_rate_limit_redis()):
+        
+        async with AsyncClient(transport=ASGITransport(app=app), base_url = "https://test") as ac:
+            yield ac
+
+
+    app.dependency_overrides.clear()
