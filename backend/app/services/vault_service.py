@@ -44,7 +44,7 @@ async def update_vault(db,user_id,vault_id,data):
         logger.error("Vault not found with provided ID")
         raise HTTPException(status_code=404,detail="Not Found")
     
-    elif vault.user_id != user_id:
+    elif str(vault.user_id) != user_id:
         logger.error("Vault user id doesnt match provided user_id")
         raise HTTPException(status_code=403,detail="Forbidden")
     
@@ -70,7 +70,7 @@ async def delete_vault(db,user_id,vault_id):
         logger.error("Vault not found")
         raise HTTPException(status_code=404,detail="Not Found")
     
-    if vault.user_id != user_id:
+    if str(vault.user_id) != user_id:
         logger.error("Vault user id doesnt match provided user id")
         raise HTTPException(status_code=403,detail="Forbidden")
     
