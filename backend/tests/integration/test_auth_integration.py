@@ -6,7 +6,7 @@ VAULT_PAYLOAD = {
     "name" :"inter_vault",
     "url": "inter_url.com",
     "encrypted":"encrypted_data",
-    "iv": "unique_inter_iv"
+    "iv": "dGVzdF9pdl9kYXRh"
 }
 async def test_register_success(client):
     response = await client.post("/auth/register",json = {

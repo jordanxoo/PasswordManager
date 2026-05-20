@@ -6,7 +6,7 @@ from datetime import datetime
 from app.models.enums import Category
 from app.metrics import vault_operations_total
 logger = logging.getLogger(__name__)
-from sqlalchemy import select,or_,and_
+from sqlalchemy import select,or_,and_,func
 import base64
 import json
 from uuid import UUID
@@ -58,6 +58,9 @@ async def create_vault(db,user_id,data):
         expires_at = data.expires_at,
         category = data.category
     )
+    count = await get_vault_count(db,user_id)
+    if count >= 1000:
+        raise HTTPException(status_code=400, detail="Vault limit reached (max 1000 entries)")
 
     db.add(vault)
     await db.commit()
@@ -123,6 +126,12 @@ async def export_vaults(db,user_id):
     return vaults
 
 async def import_vaults(db,user_id,entries):
+    
+    
+    count = await get_vault_count(db,user_id)
+    if count + len(entries) >= 1000:
+        raise HTTPException(status_code=400,detail="Import would exceed vault limit")
+    
     vaults = []
     for entry in entries:
         vault = Vault(
@@ -140,3 +149,9 @@ async def import_vaults(db,user_id,entries):
     await db.commit()
     vault_operations_total.labels("create").inc()
     return len(vaults)
+
+async def get_vault_count(db, user_id):
+    result = await db.execute(
+        select(func.count()).select_from(Vault).where(Vault.user_id == user_id)
+    )
+    return result.scalar()

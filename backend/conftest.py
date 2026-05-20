@@ -17,6 +17,7 @@ def mock_db():
     result.scalar_one_or_none.return_value = None
     result.scalars.return_value.all.return_value = []
     db.execute.return_value = result
+    result.scalar.return_value = 0
     return db
 
 @pytest.fixture

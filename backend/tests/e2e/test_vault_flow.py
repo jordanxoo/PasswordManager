@@ -3,7 +3,7 @@ VAULT_PAYLOAD = {
     "name" :"e2e_vault",
     "url": "e2e_url.com",
     "encrypted":"encrypted_data",
-    "iv": "unique_e2e_iv"
+    "iv": "dGVzdF9pdl9kYXRh"
 }
 
 

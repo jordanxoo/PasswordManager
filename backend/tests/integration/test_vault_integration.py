@@ -1,13 +1,13 @@
 import pytest
 from sqlalchemy import select
 from app.models.models import Vault
-
+import base64,json
 
 VAULT_PAYLOAD = {
     "name" : "test_name",
     "url": "test_url.com",
     "encrypted" : "test_encrypted",
-    "iv": "test_iv123"
+    "iv": "dGVzdF9pdl9kYXRh"
 }
 
 async def test_get_vaults_empty(client, auth_headers):
@@ -110,3 +110,57 @@ headers=headers_b)
 
     assert len(resp_b.json()["items"]) == 1
     assert resp_b.json()["items"][0]["name"] == "Client B Vault"
+
+
+async def test_create_vault_invalid_iv_too_short(client, auth_headers):
+    payload = {**VAULT_PAYLOAD, "iv": "tooshort"}
+    response = await client.post("/vault/", json=payload, headers=auth_headers)
+    assert response.status_code == 422
+
+async def test_create_vault_invalid_iv_not_base64(client, auth_headers):
+    payload = {**VAULT_PAYLOAD, "iv": "!!!!invalid!!!!!"}
+    response = await client.post("/vault/", json=payload, headers=auth_headers)
+    assert response.status_code == 422
+
+async def test_create_vault_valid_iv(client, auth_headers):
+    payload = {**VAULT_PAYLOAD, "iv": "dGVzdF9pdl9kYXRh"}
+    response = await client.post("/vault/", json=payload, headers=auth_headers)
+    assert response.status_code == 200
+
+async def test_import_exceeds_item_limit(client, auth_headers):
+    import_payload = {
+        "items": [{**VAULT_PAYLOAD} for _ in range(1001)]
+    }
+    response = await client.post("/vault/import", json=import_payload,
+headers=auth_headers)
+    assert response.status_code == 422
+
+async def test_create_vault_exceeds_user_limit(client, auth_headers, db):
+    from app.models.models import Vault
+    from sqlalchemy import insert
+
+    login_resp = await client.post("/auth/login", json={
+        "email": "testuser@test.com",
+        "password": "TestPass123!"
+    })
+    token = login_resp.json()["access_token"]
+    payload_b64 = token.split(".")[1]
+    payload_b64 += "=" * (4 - len(payload_b64) % 4)
+    user_id = json.loads(base64.b64decode(payload_b64))["sub"]
+
+
+    await db.execute(insert(Vault).values([
+        {
+            "user_id": user_id,
+            "name": f"vault_{i}",
+            "url": "url.com",
+            "encrypted": "enc",
+            "iv": "dGVzdF9pdl9kYXRh"
+        }
+        for i in range(1000)
+    ]))
+    await db.commit()
+
+    response = await client.post("/vault/", json=VAULT_PAYLOAD, headers=auth_headers)
+    assert response.status_code == 400
+    assert "limit" in response.json()["detail"].lower()

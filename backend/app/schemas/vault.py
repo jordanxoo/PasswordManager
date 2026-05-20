@@ -3,13 +3,29 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional
 from app.models.enums import Category
+from pydantic import field_validator,Field
+import base64
 class VaultCreate(BaseModel):
-    name: str
-    url: str
-    encrypted: str
-    iv: str
+    name: str = Field(max_length=255)
+    url: str = Field(max_length=2048)
+    encrypted: str = Field(max_length=100_000)
+    iv: str = Field(max_length=512)
     expires_at: Optional[datetime] = None
     category: Optional[Category] = None
+
+    @field_validator("iv")
+    @classmethod
+    def validate_iv(cls,v):
+        if len(v) != 16:
+            raise ValueError("IV must be 16 characters (12 bytes base64)")
+        
+        try:
+            base64.b64decode(v,validate=True)
+
+        except Exception:
+            raise ValueError("IV must be valid base64")
+        
+        return v
 
 class VaultUpdate(BaseModel):
     name: str
@@ -18,6 +34,22 @@ class VaultUpdate(BaseModel):
     iv: str
     expires_at: Optional[datetime] = None
     category: Optional[Category] = None
+
+    @field_validator("iv")
+    @classmethod
+    def validate_iv(cls,v):
+        if len(v) != 16:
+            raise ValueError("IV must be 16 characters (12 bytes base64)")
+        
+        try:
+            base64.b64decode(v,validate=True)
+
+        except Exception:
+            raise ValueError("IV must be valid base64")
+        
+        return v
+
+
 class VaultResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     name: str
@@ -44,3 +76,10 @@ class VaultExportResponse(BaseModel):
 
 class VaultImportRequest(BaseModel):
     items: list[VaultCreate]
+    
+    @field_validator("items")
+    @classmethod
+    def limit(cls,v):
+        if len(v) > 1000:
+            raise ValueError("Cannot import more than 1000 items at once")
+        return v
