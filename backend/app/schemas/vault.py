@@ -34,3 +34,13 @@ class VaultPaginatedResponse(BaseModel):
     items: list[VaultResponse]
     next_cursor: Optional[str] = None
     has_next: bool
+
+
+class VaultExportResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    version: int = 1
+    exported_at: datetime
+    items: list[VaultResponse]
+
+class VaultImportRequest(BaseModel):
+    items: list[VaultCreate]

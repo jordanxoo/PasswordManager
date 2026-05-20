@@ -1,16 +1,15 @@
 from fastapi import APIRouter,Depends,Request
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.services.vault_service import get_vaults,create_vault,delete_vault,update_vault
-from  app.schemas.vault import VaultCreate,VaultResponse,VaultUpdate
+from app.services.vault_service import get_vaults,create_vault,delete_vault,update_vault,export_vaults,import_vaults
 from sqlalchemy.ext.asyncio import  AsyncSession
 from uuid import UUID
 from app.services.audit_service import log_event,EventType
 from app.publishers.vault_publisher import publish_vault_event
 from app.models.enums import Category
 from typing import Optional
-from app.schemas.vault import VaultCreate,VaultResponse,VaultUpdate,VaultPaginatedResponse
-
+from app.schemas.vault import VaultCreate,VaultResponse,VaultPaginatedResponse,VaultExportResponse,VaultImportRequest,VaultUpdate
+from datetime import datetime
 router = APIRouter()
 
 @router.get("/", response_model=VaultPaginatedResponse)
@@ -43,6 +42,38 @@ async def create_vault_endpoint(
 
     return result
 
+@router.get("/export",response_model=VaultExportResponse)
+async def export_vault_endpoint(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)):
+    
+    items = await export_vaults(db,user_id)
+    await log_event(db,EventType.VAULT_READ,request.client.host,
+                    request.headers.get("user-agent"),user_id)
+    
+
+    return VaultExportResponse(exported_at=datetime.now(),items=items)
+ 
+
+
+
+@router.post("/import")
+async def import_vault_endpoint(
+    request: Request,
+    data: VaultImportRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)):
+
+    count = await import_vaults(db,user_id,data.items)
+    await log_event(db,EventType.VAULT_CREATE,request.client.host,
+                    request.headers.get("user-agent"),user_id)
+    
+
+    return{"imported": count}
+
+
+
 @router.put("/{vault_id}",response_model=VaultResponse)
 async def update_vault_endpoint(
     request: Request,
@@ -71,3 +102,4 @@ async def delete_vault_endpoint(
                     request.headers.get("user-agent"),user_id,metadata={"vault_id": str(vault_id)})
     
     return result
+

@@ -110,3 +110,33 @@ async def delete_vault(db,user_id,vault_id):
     return {
         "message":"deleted"
     }
+
+
+async def export_vaults(db,user_id):
+    result = await db.execute(
+        select(Vault).where(Vault.user_id == user_id)
+    )
+    vaults = result.scalars().all()
+
+    vault_operations_total.labels("read").inc()
+
+    return vaults
+
+async def import_vaults(db,user_id,entries):
+    vaults = []
+    for entry in entries:
+        vault = Vault(
+            user_id = user_id,
+            name = entry.name,
+            url = entry.url,
+            encrypted = entry.encrypted,
+            iv = entry.iv,
+            expires_at = entry.expires_at,
+            category = entry.category
+        )
+        db.add(vault)
+        vaults.append(vault)
+
+    await db.commit()
+    vault_operations_total.labels("create").inc()
+    return len(vaults)
