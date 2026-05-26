@@ -25,5 +25,18 @@ class ConnectionManager:
                 pass
 
 
+    async def disconnect_all(self):
+        for user_id,sockets in list(self.connections.items()):
+            for ws in sockets:
+                try:
+                    await ws.close(code=1001)
+
+                except Exception:
+                    pass
+
+
+        self.connections.clear()
+
+
         
 manager = ConnectionManager()

@@ -8,6 +8,8 @@ from app.middleware.security_headers import security_headers_middleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from app.pubsub_listener import redis_pubsub_listener
 import asyncio
+from app.websocket_manager import manager
+
 origins = ["http://localhost:5173"]
 
 @asynccontextmanager
@@ -18,6 +20,7 @@ async def lifespan(app: FastAPI):
    yield
    task.cancel()
    await disconnect_rabbitmq()
+   await manager.disconnect_all()
    
 app = FastAPI(title = "Password Manager",lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)
