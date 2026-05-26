@@ -33,6 +33,7 @@ class Vault(Base):
     updated_at = Column(DateTime,default=datetime.now)
     expires_at = Column(DateTime,nullable=True)
     category = Column(sa.Enum(Category),nullable=True)
+    is_deleted = Column(Boolean,default=False,nullable=False)
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
@@ -54,4 +55,15 @@ class AuditLog(Base):
     event_type = Column(sa.Enum(EventType),nullable=False)
     event_metadata = Column(JSON,nullable=True)
     created_at = Column(DateTime,default=datetime.now)
+
+class VaultHistory(Base):
+    __tablename__ = "vault_history"
+    id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
+    vault_id = Column(UUID(as_uuid=True),ForeignKey("vaults.id"),nullable=False)
+    name = Column(String,nullable=False)
+    url = Column(String,nullable=False)
+    encrypted = Column(String,nullable=False)
+    iv = Column(String,nullable=False)
+    changed_at = Column(DateTime,default=datetime.now)
+
 

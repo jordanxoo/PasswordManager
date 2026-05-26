@@ -1,6 +1,5 @@
 from sqlalchemy import select
 from fastapi import HTTPException
-from app.models.models import Vault
 import logging
 from datetime import datetime
 from app.models.enums import Category
@@ -9,10 +8,12 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import select,or_,and_,func
 import base64
 import json
+from app.models.models import Vault,VaultHistory
+from sqlalchemy import select,or_,and_,func,delete
 from uuid import UUID
 
 async def get_vaults(db, user_id, category=None, cursor=None, limit=20):
-    query = select(Vault).where(Vault.user_id == user_id)
+    query = select(Vault).where(Vault.user_id == user_id,Vault.is_deleted == False)
     
     if category:
         query = query.where(Vault.category == category)
@@ -68,19 +69,43 @@ async def create_vault(db,user_id,data):
     vault_operations_total.labels("create").inc()
     return vault
 
-async def update_vault(db,user_id,vault_id,data):
-
+async def update_vault(db, user_id, vault_id, data):
     result = await db.execute(select(Vault).where(Vault.id == vault_id))
-    vault  = result.scalar_one_or_none()
+    vault = result.scalar_one_or_none()
 
     if vault is None:
         logger.error("Vault not found with provided ID")
-        raise HTTPException(status_code=404,detail="Not Found")
-    
-    elif str(vault.user_id) != user_id:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    if str(vault.user_id) != user_id:
         logger.error("Vault user id doesnt match provided user_id")
-        raise HTTPException(status_code=403,detail="Forbidden")
-    
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    history = VaultHistory(
+        vault_id=vault.id,
+        name=vault.name,
+        url=vault.url,
+        encrypted=vault.encrypted,
+        iv=vault.iv
+    )
+    db.add(history)
+
+    count_result = await db.execute(
+        select(func.count()).select_from(VaultHistory).where(VaultHistory.vault_id == vault.id)
+    )
+    history_count = count_result.scalar()
+
+    if history_count >= 3:
+        oldest = await db.execute(
+            select(VaultHistory)
+            .where(VaultHistory.vault_id == vault.id)
+            .order_by(VaultHistory.changed_at.asc())
+            .limit(1)
+        )
+        oldest_record = oldest.scalar_one_or_none()
+        if oldest_record:
+            await db.delete(oldest_record)
+
     vault.name = data.name
     vault.url = data.url
     vault.encrypted = data.encrypted
@@ -92,7 +117,8 @@ async def update_vault(db,user_id,vault_id,data):
     await db.refresh(vault)
     vault_operations_total.labels("update").inc()
     return vault
-    
+
+
 
 async def delete_vault(db,user_id,vault_id):
 
@@ -107,13 +133,10 @@ async def delete_vault(db,user_id,vault_id):
         logger.error("Vault user id doesnt match provided user id")
         raise HTTPException(status_code=403,detail="Forbidden")
     
-    await db.delete(vault)
+    vault.is_deleted = True
     await db.commit()
     vault_operations_total.labels("delete").inc()
-    return {
-        "message":"deleted"
-    }
-
+    return {"message":"deleted"}
 
 async def export_vaults(db,user_id):
     result = await db.execute(
@@ -155,3 +178,47 @@ async def get_vault_count(db, user_id):
         select(func.count()).select_from(Vault).where(Vault.user_id == user_id)
     )
     return result.scalar()
+
+
+
+async def  get_vault_history(db,user_id,vault_id):
+    result = await db.execute(select(Vault).where(Vault.id == vault_id))
+    vault = result.scalar_one_or_none()
+
+    if vault is None or str(vault.user_id) != vault_id:
+        raise HTTPException(status_code=404,detail="Not found")
+    
+    history = await db.execute(
+        select(VaultHistory).where(VaultHistory.vault_it == vault_id)
+        .order_by(VaultHistory.changed_at.desc())
+    )
+
+    return history.scalars().all()
+
+
+async def restore_vault(db,user_id,vault_id,history_id):
+    result = await db.execute(select(Vault).where(Vault.id == vault_id))
+    vault = result.scalar_one_or_none()
+
+    if vault is None or str(vault.user_id) != user_id:
+        raise HTTPException(status_code=404,detail="not found")
+    
+    history_result = await db.execute(
+        select(VaultHistory).where(VaultHistory.id == history_id,
+                                   VaultHistory.vault_it == vault_id)
+    )
+
+    history = history_result.scalar_one_or_none()
+
+    if history is None:
+        raise HTTPException(status_code=404,detail="History record not found")
+    
+    vault.name = history.name
+    vault.url = history.url
+    vault.encrypted = history.encrypted
+    vault.iv = history.iv
+    vault.updated_at = datetime.now()
+    vault.is_deleted = False
+    await db.commit()
+    await db.refresh(vault)
+    return vault

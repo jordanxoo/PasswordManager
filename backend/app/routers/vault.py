@@ -1,14 +1,14 @@
 from fastapi import APIRouter,Depends,Request
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.services.vault_service import get_vaults,create_vault,delete_vault,update_vault,export_vaults,import_vaults
+from app.services.vault_service import get_vaults,create_vault,delete_vault,update_vault,export_vaults,import_vaults,get_vault_history,restore_vault
 from sqlalchemy.ext.asyncio import  AsyncSession
 from uuid import UUID
 from app.services.audit_service import log_event,EventType
 from app.publishers.vault_publisher import publish_vault_event
 from app.models.enums import Category
 from typing import Optional
-from app.schemas.vault import VaultCreate,VaultResponse,VaultPaginatedResponse,VaultExportResponse,VaultImportRequest,VaultUpdate
+from app.schemas.vault import VaultCreate,VaultResponse,VaultPaginatedResponse,VaultExportResponse,VaultImportRequest,VaultUpdate,VaultHistoryResponse
 from datetime import datetime
 router = APIRouter()
 
@@ -72,6 +72,23 @@ async def import_vault_endpoint(
 
     return{"imported": count}
 
+@router.get("/{vault_id}/history",response_model=list[VaultHistoryResponse])
+async def get_vault_history_endpoint(
+    vault_id:UUID,
+    db:AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)):
+    
+    return await get_vault_history(db,user_id,vault_id)
+
+@router.post("/{vault_id}/restore/{history_id}")
+async def  restore_vault_endpoint(
+    vault_id: UUID,
+    history_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)):
+
+    return await restore_vault(db,user_id,vault_id,history_id)
+
 
 
 @router.put("/{vault_id}",response_model=VaultResponse)
@@ -102,4 +119,6 @@ async def delete_vault_endpoint(
                     request.headers.get("user-agent"),user_id,metadata={"vault_id": str(vault_id)})
     
     return result
+
+
 

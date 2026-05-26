@@ -83,3 +83,15 @@ class VaultImportRequest(BaseModel):
         if len(v) > 1000:
             raise ValueError("Cannot import more than 1000 items at once")
         return v
+    
+
+class VaultHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    vault_id: UUID
+    name: str
+    url: str
+    encrypted: str
+    iv: str
+    changed_at:datetime
+    

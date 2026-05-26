@@ -49,7 +49,7 @@ async def test_delete_vault(client,auth_headers,db):
     response = await client.delete(f"/vault/{vault_id}",headers=auth_headers)
     assert response.status_code == 200
 
-    result = await db.execute(select(Vault))
+    result = await db.execute(select(Vault).where(Vault.is_deleted == False))
     vaults = result.scalars().all()
 
     assert len(vaults) == 0
