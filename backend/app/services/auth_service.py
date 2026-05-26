@@ -163,16 +163,21 @@ async def logout(db,redis,token,access_token):
         raise HTTPException(status_code=401,detail="Token Error")
     
 
-    await db.delete(token_db)
+    await db.execute(delete(RefreshToken).where(RefreshToken.family_id == token_db.family_id))
+
     await db.commit()
     await redis.delete(f"refresh:{token}")
 
-    await redis.setex(
-        f"blacklist:{access_token}",
-        900,
-        "1"
-    )
+    try:
+        payload = jwt.decode(access_token,settings.JWT_SECRET,algorithms=["HS256"])
+        remaining = payload["exp"] - int(datetime.now().timestamp())
 
+        if remaining > 0:
+            await redis.setex(f"blacklist:{access_token}",remaining,"1")
+
+    except Exception:
+        pass
+    
     return {"message" : "logged out"}
 
 
