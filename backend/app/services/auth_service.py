@@ -1,5 +1,5 @@
 from argon2 import PasswordHasher
-from sqlalchemy import select
+from sqlalchemy import select,delete
 import logging
 from jose import jwt
 from datetime import datetime,timedelta
@@ -73,12 +73,14 @@ async def login_user(db,redis,email,password):
         }
         jwt_token = jwt.encode(payload,settings.JWT_SECRET,algorithm="HS256")
         refresh_token = secrets.token_hex(32)
+        family_id = secrets.token_hex(16)
 
         refresh_token_record = RefreshToken(
             user_id = user.id,
             token= refresh_token,
-            expires_at = datetime.now() + timedelta(days=7)
-        )
+            family_id = family_id,
+            expires_at = datetime.now() + timedelta(days=7),
+            is_used = False)
 
         db.add(refresh_token_record)
         await db.commit()
@@ -105,37 +107,50 @@ async def login_user(db,redis,email,password):
             "user_id": str(user.id)}
 
 
-async def refresh_access_token(db,token,redis):
-
-    cached_user_id = await redis.get(f"refresh:{token}")
-    if cached_user_id:
-        payload = {
-            "sub": cached_user_id,
-            "exp": datetime.now() + timedelta(minutes=15)
-        }
-
-        return {"access_token": jwt.encode(payload,settings.JWT_SECRET,algorithm="HS256")}
-
+async def refresh_access_token(db, token, redis):
     result = await db.execute(select(RefreshToken).where(RefreshToken.token == token))
     token_db = result.scalar_one_or_none()
 
     if token_db is None:
-        logger.error("RefreshToken not found")
-        raise HTTPException(status_code=401,detail="Token Error")
-    
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    if token_db.is_used:
+        logger.warning("Refresh token reuse detected, invalidating family: %s", token_db.family_id)
+        await db.execute(delete(RefreshToken).where(RefreshToken.family_id ==token_db.family_id))
+        await db.commit()
+        raise HTTPException(status_code=401, detail="Token reuse detected. Please login again.")
+
     if token_db.expires_at < datetime.now():
-        raise HTTPException(status_code=401,detail="Refresh token expired")
+        await db.delete(token_db)
+        await db.commit()
+        raise HTTPException(status_code=401, detail="Refresh token expired")
 
+    token_db.is_used = True
 
+    new_refresh_token = secrets.token_hex(32)
+    new_token_record = RefreshToken(
+        user_id=token_db.user_id,
+        token=new_refresh_token,
+        family_id=token_db.family_id,
+        expires_at=datetime.now() + timedelta(days=7),
+        is_used=False
+    )   
+    db.add(new_token_record)
+    await db.commit()
 
+    await redis.delete(f"refresh:{token}")
+    await redis.setex(f"refresh:{new_refresh_token}", 604800, str(token_db.user_id))
+    
     payload = {
         "sub": str(token_db.user_id),
         "exp": datetime.now() + timedelta(minutes=15)
-    }
-    new_jwt = jwt.encode(payload,settings.JWT_SECRET,algorithm="HS256")
+    }   
 
-    return {"access_token" : new_jwt}
+    return {
+        "access_token": jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256"),
+        "new_refresh_token": new_refresh_token
+    }   
     
+        
 
 async def logout(db,redis,token,access_token):
     
@@ -265,11 +280,13 @@ async def validate_2fa_code(db,redis,pending_token,code):
 
     jwt_token = jwt.encode(payload,settings.JWT_SECRET,algorithm="HS256")
     refresh_token = secrets.token_hex(32)
-
+    family_id = secrets.token_hex(16)
     refresh_token_record = RefreshToken(
         user_id= user.id,
         token = refresh_token,
-        expires_at = datetime.now() + timedelta(days=7)
+        family_id = family_id,
+        expires_at = datetime.now() + timedelta(days=7),
+        is_used = False
     )
 
     db.add(refresh_token_record)

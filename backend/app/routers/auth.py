@@ -87,8 +87,15 @@ async def refresh(request: Request,
     
 
     result =  await refresh_access_token(db,refresh_token,redis)
+    Response.set_cookie(
+        key="refresh_token",
+        value= result["new_refresh_token"],
+        httponly=True,
+        secure=True,
+        samesite="lax"
+    )
     await log_event(db,EventType.TOKEN_REFRESH,request.client.host,request.headers.get("user-agent"))
-    return result
+    return {"access_token": result["access_token"]}
 
 @router.post("/logout")
 async def logout_endpoint(response: Response, 

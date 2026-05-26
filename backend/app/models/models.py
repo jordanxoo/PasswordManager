@@ -40,7 +40,9 @@ class RefreshToken(Base):
     id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
     user_id = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=False)
     token = Column(String,nullable=False)
+    family_id = Column(String,nullable=False)
     expires_at = Column(DateTime,nullable=False)
+    is_used = Column(Boolean,default=False,nullable=False)
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
