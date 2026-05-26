@@ -9,7 +9,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from app.pubsub_listener import redis_pubsub_listener
 import asyncio
 from app.websocket_manager import manager
-
+from app.middleware.request_size import RequestSizeLimitMiddleware
 origins = ["http://localhost:5173"]
 
 @asynccontextmanager
@@ -26,6 +26,7 @@ app = FastAPI(title = "Password Manager",lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)
 
 app.add_middleware(CORSMiddleware,allow_origins=origins,allow_methods=["*"],allow_credentials= True,allow_headers=["*"])
+app.add_middleware(RequestSizeLimitMiddleware)
 app.middleware("http")(rate_limit_middleware)
 app.middleware("http")(security_headers_middleware)
 app.include_router(auth.router,prefix="/auth",tags=["auth"])

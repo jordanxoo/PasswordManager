@@ -83,7 +83,7 @@ async def update_vault_endpoint(
     user_id: str = Depends(get_current_user)):
 
     result =  await update_vault(db,user_id,vault_id,data)    
-    await publish_vault_event("update",user_id,str(id))
+    await publish_vault_event("update",user_id,str(vault_id))
     await log_event(db,EventType.VAULT_UPDATE,request.client.host,
                     request.headers.get("user-agent"),user_id,metadata={"vault_id":str(vault_id)}
     )
@@ -97,7 +97,7 @@ async def delete_vault_endpoint(
     user_id: str = Depends(get_current_user)):
 
     result =  await delete_vault(db,user_id,vault_id)   
-    await publish_vault_event("delete",user_id,str(id))
+    await publish_vault_event("delete",user_id,str(vault_id))
     await log_event(db,EventType.VAULT_DELETE,request.client.host,
                     request.headers.get("user-agent"),user_id,metadata={"vault_id": str(vault_id)})
     

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 
 from app.models.enums import EventType
 
@@ -25,8 +25,8 @@ class AuditLogFilter(BaseModel):
     date_from: Optional[datetime] = None
     date_to: Optional[datetime] = None
     ip_address: Optional[str] = None
-    limit: int = 50
-    offset: int = 0
+    limit: int = Field(default=50,ge=1,le=100)
+    offset: int = Field(default=0,ge=0)
 
 class AuditLogStats(BaseModel):
     total_events: int

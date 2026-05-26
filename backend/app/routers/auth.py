@@ -46,7 +46,15 @@ async def login(data: LoginRequest,
     try:
         result = await login_user(db,redis,data.email,data.password)
         if result.get("requires_2fa"):
-            return {"requires_2fa": True, "pending_token":result["pending_token"]}
+            response.set_cookie(
+                key = "pending_token",
+                value=result["pending_token"],
+                httponly=True,
+                secure=True,
+                samesite="lax",
+                max_age=300
+            )
+            return {"requires_2fa": True}
     except HTTPException as e:
         if e.status_code == 401:
             await log_event(db,EventType.LOGIN_FAILED,
@@ -158,17 +166,25 @@ async def disable_2fa_endpoint(data: TwoFactorVerifyRequest,
                                                                                     
 
 @router.post("/2fa/validate")
-async def validate_2fa_endpoint(data: TwoFactorValidateRequest,
-                                response: Response,                                     
-                                request: Request,  
-                                db: AsyncSession = Depends(get_db),                     
-                                redis=Depends(get_redis)):         
-    result = await validate_2fa_code(db, redis, data.pending_token, data.code)           
-    response.set_cookie(key="refresh_token", value=result["refresh_token"],   
-                        httponly=True, secure=True, samesite="lax")                      
-    await log_event(db, EventType.TWO_FA_SUCCESS, request.client.host,                   
-                    request.headers.get("user-agent"), result["user_id"])                
-    await check_and_publish_suspicious_login(redis, result["email"],                     
-                                            request.client.host, result["user_id"])     
-    return LoginResponse(access_token=result["access_token"], token_type="bearer",       
-salt=result["salt"])
+async def validate_2fa_endpoint(
+    response: Response,
+    request: Request,
+    data: TwoFactorValidateRequest,
+    pending_token: str = Cookie(None),
+    db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis)):
+
+    if pending_token is None:
+        raise HTTPException(status_code=401, detail="No pending token")
+
+    result = await validate_2fa_code(db, redis, pending_token, data.code)
+
+    response.delete_cookie("pending_token")
+    response.set_cookie(key="refresh_token", value=result["refresh_token"],
+                        httponly=True, secure=True, samesite="lax")
+    await log_event(db, EventType.TWO_FA_SUCCESS, request.client.host,
+                    request.headers.get("user-agent"), result["user_id"])
+    await check_and_publish_suspicious_login(redis, result["email"],
+                                            request.client.host, result["user_id"])
+    return LoginResponse(access_token=result["access_token"], token_type="bearer",
+                        salt=result["salt"])

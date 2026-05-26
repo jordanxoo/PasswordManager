@@ -3,14 +3,14 @@ async def test_full_auth_flow(e2e_client):
     
     response = await e2e_client.post("/auth/register",json ={
         "email":"e2e@test.com",
-        "password":"e2epass",
+        "password":"e2epass1",
         "salt":"e2esalt"
     })
     assert response.status_code == 200
 
     response_l = await e2e_client.post("/auth/login",json = {
         "email":"e2e@test.com",
-        "password":"e2epass"
+        "password":"e2epass1"
     })
 
     assert response_l.status_code == 200
