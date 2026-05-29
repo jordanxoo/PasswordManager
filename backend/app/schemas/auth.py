@@ -27,3 +27,19 @@ class TwoFactorVerifyRequest(BaseModel):
 
 class TwoFactorValidateRequest(BaseModel):
     code: str = Field(min_length=6,max_length=6,pattern=r'^\d{6}$')
+
+class TwoFactorVerifyResponse(BaseModel):
+    message: str
+    recovery_codes: list[str]
+
+class RecoveryCodesResponse(BaseModel):
+    codes: list[str]
+    message: str
+
+class RecoveryValidateRequest(BaseModel):
+    code: str = Field(min_length=9, max_length=9,
+    pattern=r'^[a-z0-9]{4}-[a-z0-9]{4}$')
+
+class RecoveryStatusResponse(BaseModel):
+    remaining: int
+    total: int

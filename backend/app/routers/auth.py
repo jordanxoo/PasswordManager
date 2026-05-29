@@ -13,14 +13,20 @@ from app.publishers.security_publisher import publish_security_alert,check_and_p
 from app.services.auth_service import (                                                  
       register_user, login_user, logout, refresh_access_token,                             
       get_salt, setup_2fa, verify_2fa_setup, disable_2fa, validate_2fa_code
-  )                                                                                        
+  )                    
+from app.services.recovery_service import generate_recovery_codes,get_remaining_count,validate_recovery_code                                                                    
 from app.schemas.auth import (
     RegisterRequest, LoginRequest, LoginResponse,                                        
-    TwoFactorSetupResponse, TwoFactorVerifyRequest, TwoFactorValidateRequest
+    TwoFactorSetupResponse, TwoFactorVerifyRequest, TwoFactorValidateRequest,RecoveryStatusResponse,RecoveryValidateRequest,RecoveryCodesResponse
 )
+
 from app.dependencies import get_current_user
 from app.models import User
 from sqlalchemy import select
+import pyotp
+import secrets
+from app.models.models import RefreshToken
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -188,3 +194,107 @@ async def validate_2fa_endpoint(
                                             request.client.host, result["user_id"])
     return LoginResponse(access_token=result["access_token"], token_type="bearer",
                         salt=result["salt"])
+
+@router.post("/2fa/recovery/generate", response_model=RecoveryCodesResponse)
+async def generate_recovery_codes_endpoint(
+    data: TwoFactorVerifyRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)):
+
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+
+    if user is None or not user.totp_enabled:
+        raise HTTPException(status_code=400, detail="2FA not enabled")
+
+    if not pyotp.TOTP(user.totp_secret).verify(data.code):
+        raise HTTPException(status_code=401, detail="Invalid TOTP code")
+
+    codes = await generate_recovery_codes(db, user_id)
+    await log_event(db, EventType.RECOVERY_CODES_GENERATED,request.client.host,
+                   request.headers.get("user-agent"), user_id)
+
+    return RecoveryCodesResponse(
+        codes=codes,
+        message="Save these codes — they won't be shown again"
+    )
+
+
+@router.post("/2fa/recovery/validate")
+async def validate_recovery_endpoint(
+    response: Response,
+    request: Request,
+    data: RecoveryValidateRequest,
+    pending_token: str = Cookie(None),
+    db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis)):
+
+    if pending_token is None:
+        raise HTTPException(status_code=401, detail="No pending token")
+
+    user_id = await redis.get(f"2fa_pending:{pending_token}")
+
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    is_valid = await validate_recovery_code(db, user_id, data.code)
+
+    if not is_valid:
+        await log_event(db, EventType.RECOVERY_CODE_FAILED, request.client.host,
+                        request.headers.get("user-agent"), user_id)
+        raise HTTPException(status_code=401, detail="Invalid recovery code")
+
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await redis.delete(f"2fa_pending:{pending_token}")
+
+    payload = {
+        "sub": str(user.id),
+        "exp": datetime.now() + timedelta(minutes=15)
+    }
+    jwt_token = jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+    refresh_token = secrets.token_hex(32)
+    family_id = secrets.token_hex(16)
+
+    refresh_record = RefreshToken(
+        user_id=user.id,
+        token=refresh_token,
+        family_id=family_id,
+        expires_at=datetime.now() + timedelta(days=7),
+        is_used=False
+    )
+    db.add(refresh_record)
+    await db.commit()
+
+    await redis.setex(f"refresh:{refresh_token}", 604800, str(user.id))
+    await redis.setex(f"refresh:{refresh_token}", 604800, str(user.id))
+
+    
+    db.add(refresh_record)
+    await db.commit()
+
+    await redis.setex(f"refresh:{refresh_token}", 604800, str(user.id))
+
+    response.delete_cookie("pending_token")
+    response.set_cookie(key="refresh_token", value=refresh_token,
+                        httponly=True, secure=True, samesite="lax")
+
+    await log_event(db, EventType.RECOVERY_CODE_USED, request.client.host,
+                    request.headers.get("user-agent"), str(user.id))
+
+    return LoginResponse(
+        access_token=jwt_token,
+        token_type="bearer",
+        salt=user.salt
+    )
+
+
+@router.get("/2fa/recovery/status", response_model=RecoveryStatusResponse)
+async def recovery_status_endpoint(
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)):
+
+    return await get_remaining_count(db, user_id)

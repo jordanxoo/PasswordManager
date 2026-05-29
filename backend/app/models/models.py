@@ -66,4 +66,11 @@ class VaultHistory(Base):
     iv = Column(String,nullable=False)
     changed_at = Column(DateTime,default=datetime.now)
 
-
+class RecoveryCode(Base):
+    __tablename__ = "recovery_codes"
+    id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
+    user_id = Column(UUID,ForeignKey("users.id"),nullable=False)
+    code_hash = Column(String,nullable=False)
+    is_used = Column(Boolean,default=False,nullable=False)
+    used_at = Column(DateTime,default=datetime.now)
+    

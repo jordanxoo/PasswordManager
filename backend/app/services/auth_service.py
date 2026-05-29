@@ -13,7 +13,6 @@ import qrcode
 import io
 import base64
 from app.metrics import login_failures_total
-
 logger = logging.getLogger(__name__)
 ph = PasswordHasher(time_cost = settings.ARGON2_TIME_COST,
                     memory_cost= settings.ARGON2_MEMORY_COST)
@@ -222,6 +221,8 @@ async def setup_2fa(db,user_id):
 
 
 async def verify_2fa_setup(db,user_id,code):
+    from app.services.recovery_service import generate_recovery_codes
+    
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
@@ -236,8 +237,9 @@ async def verify_2fa_setup(db,user_id,code):
     
     user.totp_enabled = True
     await db.commit()
+    codes = await generate_recovery_codes(db,user_id)
 
-    return {"message": "2FA enabled"}
+    return {"message": "2FA enabled", "recovery_codes":codes}
 
 async def disable_2fa(db,user_id,code):
     result = await db.execute(select(User).where(User.id == user_id))

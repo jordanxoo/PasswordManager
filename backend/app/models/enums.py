@@ -27,6 +27,10 @@ class EventType(enum.Enum):
     HIBP_PASSWORD_CHECK = "hibp_password_check"
     HIBP_EMAIl_CHECK = "hibp_email_check"
 
+    RECOVERY_CODES_GENERATED = "recovery_codes_generated"
+    RECOVERY_CODES_USED = "recovery_codes_used"
+    RECOVERY_CODE_FAILED = "recovery_code_failed"
+
 
 class Role(enum.Enum):
     USER = "user"
