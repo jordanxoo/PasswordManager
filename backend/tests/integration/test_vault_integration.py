@@ -164,3 +164,66 @@ async def test_create_vault_exceeds_user_limit(client, auth_headers, db):
     response = await client.post("/vault/", json=VAULT_PAYLOAD, headers=auth_headers)
     assert response.status_code == 400
     assert "limit" in response.json()["detail"].lower()
+
+async def test_vault_history_created_on_update(client,auth_headers):
+    create_resp = await client.post("/vault/",json=VAULT_PAYLOAD,headers=auth_headers)
+    vault_id = create_resp.json()["id"]
+
+    await client.put(f"/vault/{vault_id}",json={**VAULT_PAYLOAD,"name":"updated"},headers=auth_headers)
+
+    history_resp = await client.get(f"/vault/{vault_id}/history",headers=auth_headers)
+    print("BODY: ",history_resp.json())
+    assert history_resp.status_code == 200
+    assert len(history_resp.json()) == 1
+    assert history_resp.json()[0]["name"] == VAULT_PAYLOAD["name"]
+
+
+async def test_vault_history_max_3_versions(client,auth_headers):
+    create_resp = await client.post("/vault/",json=VAULT_PAYLOAD,headers=auth_headers)
+
+    vault_id = create_resp.json()["id"]
+
+    for i in range(4):
+        await client.put(f"/vault/{vault_id}", json={**VAULT_PAYLOAD,"name":f"v{i}"},
+                         headers=auth_headers)
+        
+
+    history_resp = await client.get(f"/vault/{vault_id}/history",headers=auth_headers)
+
+    assert len(history_resp.json()) <= 3
+
+
+async def test_vault_restore(client,auth_headers):
+    create_resp = await client.post("/vault/",json=VAULT_PAYLOAD,
+                                    headers=auth_headers)
+    vault_id = create_resp.json()["id"]
+
+    await client.put(f"/vault/{vault_id}",json={**VAULT_PAYLOAD,"name":"new"},headers=auth_headers)
+
+    history_resp = await client.get(f"/vault/{vault_id}/history",
+    headers=auth_headers)
+    print("STATUS:", history_resp.status_code)
+    print("BODY:", history_resp.json())
+    history_id = history_resp.json()[0]["id"]
+
+    history_id = history_resp.json()[0]["id"]
+
+    restore_resp = await client.post(f"/vault/{vault_id}/restore/{history_id}",headers=auth_headers)
+    assert restore_resp.status_code == 200
+    assert restore_resp.json()["name"] == VAULT_PAYLOAD["name"]
+
+
+async def test_vault_history_requires_auth(client):
+    response = await client.get("/vault/uuid/history")
+    assert response.status_code == 401
+
+async def test_soft_deleted_vault_not_in_list(client,auth_headers):
+    create_resp = await client.post("/vault/",json=VAULT_PAYLOAD,headers=auth_headers)
+
+    vault_id = create_resp.json()["id"]
+
+    await client.delete(f"/vault/{vault_id}",headers=auth_headers)
+
+    list_resp = await client.get("/vault/",headers=auth_headers)
+    assert list_resp.json()["items"] == []
+

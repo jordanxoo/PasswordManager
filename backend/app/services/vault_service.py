@@ -185,11 +185,11 @@ async def  get_vault_history(db,user_id,vault_id):
     result = await db.execute(select(Vault).where(Vault.id == vault_id))
     vault = result.scalar_one_or_none()
 
-    if vault is None or str(vault.user_id) != vault_id:
+    if vault is None or str(vault.user_id) != user_id:
         raise HTTPException(status_code=404,detail="Not found")
     
     history = await db.execute(
-        select(VaultHistory).where(VaultHistory.vault_it == vault_id)
+        select(VaultHistory).where(VaultHistory.vault_id == vault_id)
         .order_by(VaultHistory.changed_at.desc())
     )
 
@@ -205,7 +205,7 @@ async def restore_vault(db,user_id,vault_id,history_id):
     
     history_result = await db.execute(
         select(VaultHistory).where(VaultHistory.id == history_id,
-                                   VaultHistory.vault_it == vault_id)
+                                   VaultHistory.vault_id == vault_id)
     )
 
     history = history_result.scalar_one_or_none()
