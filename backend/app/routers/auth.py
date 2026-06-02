@@ -270,19 +270,13 @@ async def validate_recovery_endpoint(
     await db.commit()
 
     await redis.setex(f"refresh:{refresh_token}", 604800, str(user.id))
-    await redis.setex(f"refresh:{refresh_token}", 604800, str(user.id))
-
-    
     db.add(refresh_record)
     await db.commit()
-
     await redis.setex(f"refresh:{refresh_token}", 604800, str(user.id))
-
-    response.delete_cookie("pending_token")
     response.set_cookie(key="refresh_token", value=refresh_token,
                         httponly=True, secure=True, samesite="lax")
 
-    await log_event(db, EventType.RECOVERY_CODE_USED, request.client.host,
+    await log_event(db, EventType.RECOVERY_CODES_USED, request.client.host,
                     request.headers.get("user-agent"), str(user.id))
 
     return LoginResponse(
