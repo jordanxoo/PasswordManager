@@ -74,3 +74,17 @@ class RecoveryCode(Base):
     is_used = Column(Boolean,default=False,nullable=False)
     used_at = Column(DateTime,default=datetime.now)
     
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+    id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
+    user_id = Column(UUID(as_uuid=True),ForeignKey("users.id"), nullable= False)
+    key_hash = Column(String,nullable=False,unique=True)
+    name = Column(String(50),nullable=False)
+    scope = Column(String(10),nullable=False)
+    last_used_at = Column(DateTime,nullable=True)
+    expires_at = Column(DateTime,nullable=True)
+    created_at = Column(DateTime,default=datetime.now)
+
+
+

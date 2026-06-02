@@ -1,6 +1,6 @@
 from fastapi import APIRouter,Depends,Request
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_read,require_write
 from app.services.vault_service import get_vaults,create_vault,delete_vault,update_vault,export_vaults,import_vaults,get_vault_history,restore_vault
 from sqlalchemy.ext.asyncio import  AsyncSession
 from uuid import UUID
@@ -16,7 +16,7 @@ router = APIRouter()
 async def get_vaults_endpoint(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user),
+    user_id: str = Depends(require_read),
     category: Optional[Category] = None,
     cursor: Optional[str] = None,
     limit: int = 20):
@@ -33,7 +33,7 @@ async def create_vault_endpoint(
     request: Request,
     data: VaultCreate,
     db:AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user)):
+    user_id: str = Depends(require_write)):
 
     result = await create_vault(db,user_id,data)
     await publish_vault_event("create",user_id,str(result.id))
@@ -46,7 +46,7 @@ async def create_vault_endpoint(
 async def export_vault_endpoint(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user)):
+    user_id: str = Depends(require_read)):
     
     items = await export_vaults(db,user_id)
     await log_event(db,EventType.VAULT_READ,request.client.host,
@@ -63,7 +63,7 @@ async def import_vault_endpoint(
     request: Request,
     data: VaultImportRequest,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user)):
+    user_id: str = Depends(require_write)):
 
     count = await import_vaults(db,user_id,data.items)
     await log_event(db,EventType.VAULT_CREATE,request.client.host,
@@ -76,7 +76,7 @@ async def import_vault_endpoint(
 async def get_vault_history_endpoint(
     vault_id:UUID,
     db:AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user)):
+    user_id: str = Depends(require_read)):
     
     return await get_vault_history(db,user_id,vault_id)
 
@@ -85,7 +85,7 @@ async def  restore_vault_endpoint(
     vault_id: UUID,
     history_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user)):
+    user_id: str = Depends(require_write)):
 
     return await restore_vault(db,user_id,vault_id,history_id)
 
@@ -97,7 +97,7 @@ async def update_vault_endpoint(
     vault_id:UUID,
     data:VaultUpdate,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user)):
+    user_id: str = Depends(require_write)):
 
     result =  await update_vault(db,user_id,vault_id,data)    
     await publish_vault_event("update",user_id,str(vault_id))
@@ -111,7 +111,7 @@ async def delete_vault_endpoint(
     request: Request,
     vault_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user_id: str = Depends(get_current_user)):
+    user_id: str = Depends(require_write)):
 
     result =  await delete_vault(db,user_id,vault_id)   
     await publish_vault_event("delete",user_id,str(vault_id))
