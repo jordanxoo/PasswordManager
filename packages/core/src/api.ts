@@ -187,6 +187,14 @@ export function createApiClient(baseUrl: string) {
       );
     },
 
+    setPin(id: string, pinned: boolean): Promise<VaultEntry> {
+      return request(
+        `/vault/${id}/pin`,
+        { method: "PATCH", body: JSON.stringify({ pinned }) },
+        vaultEntrySchema,
+      );
+    },
+
     deleteVault(id: string): Promise<void> {
       return request(`/vault/${id}`, { method: "DELETE" });
     },

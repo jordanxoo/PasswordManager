@@ -1,13 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { useAuth } from "../stores/authStore";
-import {
-  decodeEntry,
-  draftFromItem,
-  encodeDraft,
-  type VaultDraft,
-  type VaultItem,
-} from "./vault";
+import { decodeEntry, encodeDraft, type VaultDraft, type VaultItem } from "./vault";
 
 const VAULT_KEY = ["vault"] as const;
 
@@ -40,18 +34,17 @@ export function useUpdateVault() {
   const qc = useQueryClient();
   const key = useAuth((s) => s.encryptionKey);
   return useMutation({
-    mutationFn: async ({ id, draft, pinned }: { id: string; draft: VaultDraft; pinned: boolean }) =>
-      api.updateVault(id, await encodeDraft(draft, key!, pinned)),
+    mutationFn: async ({ id, draft }: { id: string; draft: VaultDraft }) =>
+      api.updateVault(id, await encodeDraft(draft, key!)),
     onSuccess: () => qc.invalidateQueries({ queryKey: VAULT_KEY }),
   });
 }
 
+/** Pin/unpin via the dedicated endpoint — no re-encryption, no history entry. */
 export function useTogglePin() {
   const qc = useQueryClient();
-  const key = useAuth((s) => s.encryptionKey);
   return useMutation({
-    mutationFn: async (item: VaultItem) =>
-      api.updateVault(item.id, await encodeDraft(draftFromItem(item), key!, !item.pinned)),
+    mutationFn: (item: VaultItem) => api.setPin(item.id, !item.pinned),
     onSuccess: () => qc.invalidateQueries({ queryKey: VAULT_KEY }),
   });
 }

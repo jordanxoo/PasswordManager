@@ -61,6 +61,10 @@ class VaultResponse(BaseModel):
     updated_at: datetime
     expires_at: Optional[datetime] = None
     category: Optional[Category] = None
+    pinned: bool = False
+
+class VaultPinRequest(BaseModel):
+    pinned: bool
 
 class VaultPaginatedResponse(BaseModel):
     items: list[VaultResponse]

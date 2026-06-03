@@ -90,21 +90,7 @@ async def update_vault(db, user_id, vault_id, data):
     )
     db.add(history)
 
-    count_result = await db.execute(
-        select(func.count()).select_from(VaultHistory).where(VaultHistory.vault_id == vault.id)
-    )
-    history_count = count_result.scalar()
-
-    if history_count >= 3:
-        oldest = await db.execute(
-            select(VaultHistory)
-            .where(VaultHistory.vault_id == vault.id)
-            .order_by(VaultHistory.changed_at.asc())
-            .limit(1)
-        )
-        oldest_record = oldest.scalar_one_or_none()
-        if oldest_record:
-            await db.delete(oldest_record)
+    # Keep the full change history (no trimming).
 
     vault.name = data.name
     vault.url = data.url
@@ -118,6 +104,19 @@ async def update_vault(db, user_id, vault_id, data):
     vault_operations_total.labels("update").inc()
     return vault
 
+
+
+async def set_pin(db, user_id, vault_id, pinned):
+    result = await db.execute(select(Vault).where(Vault.id == vault_id))
+    vault = result.scalar_one_or_none()
+
+    if vault is None or str(vault.user_id) != user_id:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    vault.pinned = pinned
+    await db.commit()
+    await db.refresh(vault)
+    return vault
 
 
 async def delete_vault(db,user_id,vault_id):

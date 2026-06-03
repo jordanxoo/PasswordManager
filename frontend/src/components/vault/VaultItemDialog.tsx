@@ -68,7 +68,7 @@ export function VaultItemDialog({ open, onOpenChange, item }: Props) {
     setFormError(null);
     const draft: VaultDraft = values;
     try {
-      if (item) await update.mutateAsync({ id: item.id, draft, pinned: item.pinned });
+      if (item) await update.mutateAsync({ id: item.id, draft });
       else await create.mutateAsync(draft);
       onOpenChange(false);
     } catch (e) {

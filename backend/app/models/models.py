@@ -34,6 +34,7 @@ class Vault(Base):
     expires_at = Column(DateTime,nullable=True)
     category = Column(sa.Enum(Category),nullable=True)
     is_deleted = Column(Boolean,default=False,nullable=False)
+    pinned = Column(Boolean,default=False,nullable=False,server_default=sa.false())
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"

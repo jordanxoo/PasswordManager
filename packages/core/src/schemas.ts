@@ -27,6 +27,7 @@ export const vaultEntrySchema = z.object({
   updated_at: z.string(),
   expires_at: z.string().nullable().optional(),
   category: z.string().nullable().optional(),
+  pinned: z.boolean(),
 });
 export type VaultEntry = z.infer<typeof vaultEntrySchema>;
 

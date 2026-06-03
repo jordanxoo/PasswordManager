@@ -7,16 +7,17 @@ export interface VaultSecret {
   username: string;
   password: string;
   notes: string;
-  pinned: boolean;
 }
 
-/** A fully decrypted entry, as used by the UI. */
+/** A fully decrypted entry, as used by the UI. `pinned` is a server-side
+ *  column (not encrypted) so it can be toggled without re-encrypting. */
 export interface VaultItem extends VaultSecret {
   id: string;
   name: string;
   url: string;
   category: string | null;
   updatedAt: string;
+  pinned: boolean;
 }
 
 /** Form values for create & edit. */
@@ -41,34 +42,19 @@ export async function decodeEntry(entry: VaultEntry, key: CryptoKey): Promise<Va
     username: secret.username ?? "",
     password: secret.password ?? "",
     notes: secret.notes ?? "",
-    pinned: secret.pinned ?? false,
+    pinned: entry.pinned,
   };
 }
 
 /** Encrypt a draft into the payload the API expects (name/url stay plaintext). */
-export async function encodeDraft(
-  draft: VaultDraft,
-  key: CryptoKey,
-  pinned = false,
-): Promise<VaultInput> {
+export async function encodeDraft(draft: VaultDraft, key: CryptoKey): Promise<VaultInput> {
   const secret: VaultSecret = {
     username: draft.username,
     password: draft.password,
     notes: draft.notes,
-    pinned,
   };
   const { encrypted, iv } = await encryptEntry(JSON.stringify(secret), key);
   return { name: draft.name, url: draft.url, encrypted, iv };
-}
-
-export function draftFromItem(item: VaultItem): VaultDraft {
-  return {
-    name: item.name,
-    url: item.url,
-    username: item.username,
-    password: item.password,
-    notes: item.notes,
-  };
 }
 
 const ALPHABET =
