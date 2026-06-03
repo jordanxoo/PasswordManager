@@ -14,3 +14,32 @@ body,
 body {
   @apply bg-zinc-50 text-zinc-900 antialiased;
 }
+
+/* Modal entrance — subtle fade + pop, driven by Radix data-state. */
+@keyframes pm-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pm-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.pm-overlay[data-state="open"] {
+  animation: pm-fade 120ms ease-out;
+}
+
+.pm-content[data-state="open"] {
+  animation: pm-pop 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
