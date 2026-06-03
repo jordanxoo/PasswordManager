@@ -39,7 +39,7 @@ async def test_create_vault_adds_and_commits(mock_db):
 
     mock_db.add.assert_called_once()
     mock_db.commit.assert_called_once()
-    mock_db.refresh_assert_called_once()
+    mock_db.refresh.assert_called_once()
 
 
 async def test_update_vault_not_found(mock_db):

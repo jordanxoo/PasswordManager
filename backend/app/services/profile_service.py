@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select,delete
 from fastapi import HTTPException
-from app.models.models import User,RefreshToken,Vault,AuditLog
+from app.models.models import User,RefreshToken,Vault,AuditLog,VaultHistory,RecoveryCode,ApiKey
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
@@ -55,8 +55,17 @@ async def delete_account(db: AsyncSession,user_id: str,current_password: str):
     user = await _get_user(db,user_id)
     _verify_password(user.password,current_password)
 
-    await db.execute(delete(RefreshToken).where(user_id == RefreshToken.user_id))
+    # vault_history -> vaults is an FK without ON DELETE CASCADE, so history rows
+    # must go before their vaults or the vault delete raises a FK violation.
+    user_vault_ids = select(Vault.id).where(Vault.user_id == user_id)
+    await db.execute(delete(VaultHistory).where(VaultHistory.vault_id.in_(user_vault_ids)))
     await db.execute(delete(Vault).where(Vault.user_id == user_id))
+
+    # recovery_codes / api_keys -> users are also FKs without CASCADE, so they
+    # must be cleared before deleting the user.
+    await db.execute(delete(RecoveryCode).where(RecoveryCode.user_id == user_id))
+    await db.execute(delete(ApiKey).where(ApiKey.user_id == user_id))
+    await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
     await db.execute(delete(AuditLog).where(AuditLog.user_id == user_id))
     await db.delete(user)
     await db.commit()
