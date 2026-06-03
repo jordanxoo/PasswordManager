@@ -2,10 +2,14 @@
   "name": "password-manager",
   "private": true,
   "version": "0.0.0",
+  "packageManager": "pnpm@10.31.0",
   "scripts": {
     "dev": "pnpm --filter frontend dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "test:core": "pnpm --filter @pm/core test"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
   }
 }
