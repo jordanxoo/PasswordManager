@@ -19,8 +19,6 @@ export type Profile = z.infer<typeof profileSchema>;
 /** A vault row as stored server-side. `encrypted`/`iv` are opaque ciphertext. */
 export const vaultEntrySchema = z.object({
   id: z.string(),
-  name: z.string(),
-  url: z.string(),
   encrypted: z.string(),
   iv: z.string(),
   created_at: z.string(),

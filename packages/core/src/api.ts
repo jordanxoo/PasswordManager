@@ -25,8 +25,6 @@ export class ApiError extends Error {
 /** Payload for creating/updating a vault entry. `encrypted`/`iv` come from the
  *  crypto layer; the server never sees plaintext. */
 export interface VaultInput {
-  name: string;
-  url: string;
   encrypted: string;
   iv: string;
   category?: string | null;
@@ -173,6 +171,25 @@ export function createApiClient(baseUrl: string) {
     listVault(cursor?: string): Promise<VaultPage> {
       const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
       return request(`/vault/${qs}`, { method: "GET" }, vaultPageSchema);
+    },
+
+    /** Fetch every entry by following the cursor. The client decrypts and
+     *  searches locally, so it needs the whole vault, not one page. */
+    async listAllVault(): Promise<VaultEntry[]> {
+      const items: VaultEntry[] = [];
+      let cursor: string | null = null;
+      do {
+        const params = new URLSearchParams({ limit: "100" });
+        if (cursor) params.set("cursor", cursor);
+        const page = await request<VaultPage>(
+          `/vault/?${params.toString()}`,
+          { method: "GET" },
+          vaultPageSchema,
+        );
+        items.push(...page.items);
+        cursor = page.next_cursor ?? null;
+      } while (cursor);
+      return items;
     },
 
     createVault(input: VaultInput): Promise<VaultEntry> {

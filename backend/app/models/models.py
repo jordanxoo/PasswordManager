@@ -25,8 +25,6 @@ class Vault(Base):
 
     id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
     user_id = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=False)
-    name = Column(String,nullable=False)
-    url = Column(String, nullable= False)
     encrypted = Column(String,nullable=False)
     iv = Column(String,nullable=False)
     created_at = Column(DateTime,default= datetime.now)
@@ -61,8 +59,6 @@ class VaultHistory(Base):
     __tablename__ = "vault_history"
     id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
     vault_id = Column(UUID(as_uuid=True),ForeignKey("vaults.id"),nullable=False)
-    name = Column(String,nullable=False)
-    url = Column(String,nullable=False)
     encrypted = Column(String,nullable=False)
     iv = Column(String,nullable=False)
     changed_at = Column(DateTime,default=datetime.now)

@@ -1,7 +1,10 @@
 import { encryptEntry, decryptEntry, type VaultEntry, type VaultInput } from "@pm/core";
 
-/** The secret half of an entry — encrypted before it leaves the device. */
+/** The full entry content — everything here is encrypted before it leaves the
+ *  device (full zero-knowledge: the server only ever sees ciphertext). */
 export interface VaultSecret {
+  name: string;
+  url: string;
   username: string;
   password: string;
   notes: string;
@@ -11,8 +14,6 @@ export interface VaultSecret {
  *  column (not encrypted) so it can be toggled without re-encrypting. */
 export interface VaultItem extends VaultSecret {
   id: string;
-  name: string;
-  url: string;
   category: string | null;
   updatedAt: string;
   pinned: boolean;
@@ -33,26 +34,29 @@ export async function decodeEntry(entry: VaultEntry, key: CryptoKey): Promise<Va
   const secret = JSON.parse(json) as Partial<VaultSecret>;
   return {
     id: entry.id,
-    name: entry.name,
-    url: entry.url,
     category: entry.category ?? null,
     updatedAt: entry.updated_at,
+    pinned: entry.pinned,
+    name: secret.name ?? "",
+    url: secret.url ?? "",
     username: secret.username ?? "",
     password: secret.password ?? "",
     notes: secret.notes ?? "",
-    pinned: entry.pinned,
   };
 }
 
-/** Encrypt a draft into the payload the API expects (name/url stay plaintext). */
+/** Encrypt a draft into the API payload — name/url/username/password/notes all
+ *  go into the ciphertext; only `encrypted`+`iv` leave the device. */
 export async function encodeDraft(draft: VaultDraft, key: CryptoKey): Promise<VaultInput> {
   const secret: VaultSecret = {
+    name: draft.name,
+    url: draft.url,
     username: draft.username,
     password: draft.password,
     notes: draft.notes,
   };
   const { encrypted, iv } = await encryptEntry(JSON.stringify(secret), key);
-  return { name: draft.name, url: draft.url, encrypted, iv };
+  return { encrypted, iv };
 }
 
 const ALPHABET =

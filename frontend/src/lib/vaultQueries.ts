@@ -12,9 +12,9 @@ export function useVaultItems() {
     queryKey: VAULT_KEY,
     enabled: !!encryptionKey,
     queryFn: async (): Promise<VaultItem[]> => {
-      const page = await api.listVault();
+      const entries = await api.listAllVault();
       const decoded = await Promise.all(
-        page.items.map((entry) => decodeEntry(entry, encryptionKey!).catch(() => null)),
+        entries.map((entry) => decodeEntry(entry, encryptionKey!).catch(() => null)),
       );
       return decoded.filter((item): item is VaultItem => item !== null);
     },

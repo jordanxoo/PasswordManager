@@ -52,8 +52,6 @@ async def create_vault(db,user_id,data):
 
     vault = Vault(
         user_id = user_id,
-        name = data.name,
-        url = data.url,
         encrypted = data.encrypted,
         iv = data.iv,
         expires_at = data.expires_at,
@@ -83,8 +81,6 @@ async def update_vault(db, user_id, vault_id, data):
 
     history = VaultHistory(
         vault_id=vault.id,
-        name=vault.name,
-        url=vault.url,
         encrypted=vault.encrypted,
         iv=vault.iv
     )
@@ -92,8 +88,6 @@ async def update_vault(db, user_id, vault_id, data):
 
     # Keep the full change history (no trimming).
 
-    vault.name = data.name
-    vault.url = data.url
     vault.encrypted = data.encrypted
     vault.iv = data.iv
     vault.updated_at = datetime.now()
@@ -158,8 +152,6 @@ async def import_vaults(db,user_id,entries):
     for entry in entries:
         vault = Vault(
             user_id = user_id,
-            name = entry.name,
-            url = entry.url,
             encrypted = entry.encrypted,
             iv = entry.iv,
             expires_at = entry.expires_at,
@@ -212,8 +204,6 @@ async def restore_vault(db,user_id,vault_id,history_id):
     if history is None:
         raise HTTPException(status_code=404,detail="History record not found")
     
-    vault.name = history.name
-    vault.url = history.url
     vault.encrypted = history.encrypted
     vault.iv = history.iv
     vault.updated_at = datetime.now()

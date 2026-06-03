@@ -1,8 +1,6 @@
 
 VAULT_PAYLOAD = {
-    "name" :"e2e_vault",
-    "url": "e2e_url.com",
-    "encrypted":"encrypted_data",
+    "encrypted":"e2e_enc",
     "iv": "dGVzdF9pdl9kYXRh"
 }
 
@@ -30,16 +28,15 @@ async def test_full_vault_flow(e2e_client):
 
     resp = await e2e_client.get("/vault/", headers=headers)
     assert len(resp.json()["items"]) == 1
-    assert resp.json()["items"][0]["name"] == "e2e_vault"
+    assert resp.json()["items"][0]["encrypted"] == "e2e_enc"
 
 
 
-    updated = {**VAULT_PAYLOAD, "name": "e2e_vault_updated"}
+    updated = {**VAULT_PAYLOAD, "encrypted": "e2e_enc_updated"}
     resp = await e2e_client.put(f"/vault/{vault_id}", json=updated, headers=headers)
     resp = await e2e_client.get("/vault/", headers=headers)
-    assert resp.json()["items"][0]["name"] == "e2e_vault_updated"
+    assert resp.json()["items"][0]["encrypted"] == "e2e_enc_updated"
 
     resp = await e2e_client.delete(f"/vault/{vault_id}", headers=headers)
     resp = await e2e_client.get("/vault/", headers=headers)
     assert resp.json()["items"] == []
-

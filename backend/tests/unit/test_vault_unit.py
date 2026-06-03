@@ -80,7 +80,7 @@ async def test_update_vault_success(mock_db):
 
     await update_vault(mock_db,"user-123","vault-456",data)
 
-    assert mock_vault.name == "update ok"
+    assert mock_vault.encrypted == "new_enc"
     mock_db.commit.assert_called_once()
 
 
