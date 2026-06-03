@@ -16,6 +16,27 @@ export const profileSchema = z.object({
 });
 export type Profile = z.infer<typeof profileSchema>;
 
+/** Returned by /auth/2fa/setup: the TOTP secret + a base64-encoded QR PNG. */
+export const twoFactorSetupSchema = z.object({
+  secret: z.string(),
+  qr_code: z.string(),
+});
+export type TwoFactorSetup = z.infer<typeof twoFactorSetupSchema>;
+
+/** Returned after enabling 2FA or regenerating codes: the recovery codes. */
+export const recoveryCodesSchema = z.object({
+  recovery_codes: z.array(z.string()),
+  message: z.string().optional(),
+});
+export type RecoveryCodes = z.infer<typeof recoveryCodesSchema>;
+
+/** Returned by /auth/2fa/recovery/status. */
+export const recoveryStatusSchema = z.object({
+  remaining: z.number(),
+  total: z.number(),
+});
+export type RecoveryStatus = z.infer<typeof recoveryStatusSchema>;
+
 /** A vault row as stored server-side. `encrypted`/`iv` are opaque ciphertext. */
 export const vaultEntrySchema = z.object({
   id: z.string(),

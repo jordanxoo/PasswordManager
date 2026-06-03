@@ -1,4 +1,5 @@
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
+import { Settings } from "lucide-react";
 import { useAuth } from "../stores/authStore";
 import { Logo } from "./Logo";
 import { Button } from "./ui/Button";
@@ -11,9 +12,18 @@ export function AppLayout() {
     <div className="min-h-screen">
       <header className="border-b border-zinc-200 bg-white">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-          <Logo />
+          <Link to="/" aria-label="Vault">
+            <Logo />
+          </Link>
           <div className="flex items-center gap-3">
             <span className="hidden text-sm text-zinc-500 sm:inline">{email}</span>
+            <Link
+              to="/settings"
+              aria-label="Settings"
+              className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-zinc-900/10"
+            >
+              <Settings size={18} />
+            </Link>
             <Button variant="secondary" size="sm" onClick={() => void logout()}>
               Sign out
             </Button>

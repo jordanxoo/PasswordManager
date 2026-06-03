@@ -15,7 +15,18 @@ export type { ApiClient, VaultInput, LoginResult } from "./api";
 export {
   loginResponseSchema,
   profileSchema,
+  twoFactorSetupSchema,
+  recoveryCodesSchema,
+  recoveryStatusSchema,
   vaultEntrySchema,
   vaultPageSchema,
 } from "./schemas";
-export type { LoginResponse, Profile, VaultEntry, VaultPage } from "./schemas";
+export type {
+  LoginResponse,
+  Profile,
+  TwoFactorSetup,
+  RecoveryCodes,
+  RecoveryStatus,
+  VaultEntry,
+  VaultPage,
+} from "./schemas";

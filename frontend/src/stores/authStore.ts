@@ -16,6 +16,7 @@ interface AuthState {
   register: (email: string, masterPassword: string) => Promise<void>;
   login: (email: string, masterPassword: string) => Promise<{ requires2fa: boolean }>;
   complete2fa: (code: string) => Promise<void>;
+  completeRecovery: (code: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -48,6 +49,12 @@ export const useAuth = create<AuthState>((set) => ({
 
   async complete2fa(code) {
     await api.validate2fa(code);
+    set({ status: "authenticated", encryptionKey: pendingKey });
+    pendingKey = null;
+  },
+
+  async completeRecovery(code) {
+    await api.validateRecovery(code);
     set({ status: "authenticated", encryptionKey: pendingKey });
     pendingKey = null;
   },

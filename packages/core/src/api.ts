@@ -2,10 +2,16 @@ import type { ZodType } from "zod";
 import {
   loginResponseSchema,
   profileSchema,
+  twoFactorSetupSchema,
+  recoveryCodesSchema,
+  recoveryStatusSchema,
   vaultEntrySchema,
   vaultPageSchema,
   type LoginResponse,
   type Profile,
+  type TwoFactorSetup,
+  type RecoveryCodes,
+  type RecoveryStatus,
   type VaultEntry,
   type VaultPage,
 } from "./schemas";
@@ -156,6 +162,18 @@ export function createApiClient(baseUrl: string) {
       return parsed;
     },
 
+    /** Complete login with a one-time recovery code instead of a TOTP code. */
+    async validateRecovery(code: string): Promise<LoginResponse> {
+      const parsed = await request(
+        "/auth/2fa/recovery/validate",
+        { method: "POST", body: JSON.stringify({ code }) },
+        loginResponseSchema,
+        false,
+      );
+      accessToken = parsed.access_token;
+      return parsed;
+    },
+
     logout(): Promise<void> {
       return request<void>("/auth/logout", { method: "POST" }, undefined, false).finally(() => {
         accessToken = null;
@@ -165,6 +183,35 @@ export function createApiClient(baseUrl: string) {
     // --- profile ---
     getProfile(): Promise<Profile> {
       return request("/profile/", { method: "GET" }, profileSchema);
+    },
+
+    // --- 2FA management (authenticated) ---
+    /** Begin enrollment: returns a TOTP secret + QR. Nothing is enforced until
+     *  the user confirms a code via verify2fa. */
+    setup2fa(): Promise<TwoFactorSetup> {
+      return request("/auth/2fa/setup", { method: "POST" }, twoFactorSetupSchema);
+    },
+
+    /** Confirm a TOTP code to switch 2FA on; returns the recovery codes. */
+    verify2fa(code: string): Promise<RecoveryCodes> {
+      return request(
+        "/auth/2fa/verify",
+        { method: "POST", body: JSON.stringify({ code }) },
+        recoveryCodesSchema,
+      );
+    },
+
+    /** Turn 2FA off; requires a current TOTP code. */
+    disable2fa(code: string): Promise<{ message: string }> {
+      return request("/auth/2fa/disable", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
+    },
+
+    /** How many one-time recovery codes are still unused. */
+    recoveryStatus(): Promise<RecoveryStatus> {
+      return request("/auth/2fa/recovery/status", { method: "GET" }, recoveryStatusSchema);
     },
 
     // --- vault ---

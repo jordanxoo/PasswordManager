@@ -98,18 +98,30 @@ export function LoginPage() {
   );
 }
 
+const RECOVERY_RE = /^[a-z0-9]{4}-[a-z0-9]{4}$/;
+
 function TwoFactorForm({ onDone }: { onDone: () => void }) {
   const complete2fa = useAuth((s) => s.complete2fa);
+  const completeRecovery = useAuth((s) => s.completeRecovery);
+  const [recovery, setRecovery] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const valid = recovery ? RECOVERY_RE.test(code) : code.length === 6;
+
+  const switchMode = () => {
+    setRecovery((r) => !r);
+    setCode("");
+    setError(null);
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
     try {
-      await complete2fa(code);
+      await (recovery ? completeRecovery(code) : complete2fa(code));
       onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Invalid code. Please try again.");
@@ -121,22 +133,44 @@ function TwoFactorForm({ onDone }: { onDone: () => void }) {
   return (
     <form onSubmit={submit} className="space-y-4">
       {error && <ErrorBanner message={error} />}
-      <Field label="Authentication code" htmlFor="code">
-        <Input
-          id="code"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={6}
-          placeholder="000000"
-          value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          className="text-center tracking-[0.4em]"
-          autoFocus
-        />
-      </Field>
-      <Button type="submit" className="w-full" disabled={submitting || code.length !== 6}>
+      {recovery ? (
+        <Field label="Recovery code" htmlFor="code" hint="Format: xxxx-xxxx. Each code works once.">
+          <Input
+            id="code"
+            autoComplete="one-time-code"
+            maxLength={9}
+            placeholder="xxxx-xxxx"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+            className="text-center tracking-[0.3em]"
+            autoFocus
+          />
+        </Field>
+      ) : (
+        <Field label="Authentication code" htmlFor="code">
+          <Input
+            id="code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            placeholder="000000"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+            className="text-center tracking-[0.4em]"
+            autoFocus
+          />
+        </Field>
+      )}
+      <Button type="submit" className="w-full" disabled={submitting || !valid}>
         {submitting ? "Verifying…" : "Verify"}
       </Button>
+      <button
+        type="button"
+        onClick={switchMode}
+        className="block w-full text-center text-sm text-zinc-500 underline-offset-4 hover:text-zinc-900 hover:underline"
+      >
+        {recovery ? "Use your authenticator app instead" : "Use a recovery code instead"}
+      </button>
     </form>
   );
 }
