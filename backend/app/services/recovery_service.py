@@ -7,8 +7,11 @@ from app.models.models import RecoveryCode
 
 
 def generate_code() -> str:
+    # Must match RecoveryValidateRequest's pattern ^[a-z0-9]{4}-[a-z0-9]{4}$ —
+    # lowercase hex, a single hyphen, no spaces — or validation always 422s and
+    # the stored hash never matches what the user types.
     raw = secrets.token_hex(4)
-    return f"{raw[:4]} - {raw[4:]}"
+    return f"{raw[:4]}-{raw[4:]}"
 
 
 
@@ -56,12 +59,12 @@ async def validate_recovery_code(db,user_id,code) -> bool:
 
 async def get_remaining_count(db,user_id) -> dict:
 
-    total_result = db.execute(select(
+    total_result = await db.execute(select(
         func.count()).select_from(RecoveryCode).where(RecoveryCode.user_id == user_id))
-    
+
     total = total_result.scalar()
 
-    remaining_count = db.execute(
+    remaining_count = await db.execute(
         select(func.count()).select_from(RecoveryCode).where(
             RecoveryCode.user_id == user_id,
             RecoveryCode.is_used == False
