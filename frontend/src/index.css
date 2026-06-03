@@ -25,14 +25,16 @@ body {
   }
 }
 
+/* Only scale/opacity — Tailwind centers the dialog via the `translate`
+   property, so animating `transform: translate(...)` here would double up. */
 @keyframes pm-pop {
   from {
     opacity: 0;
-    transform: translate(-50%, -48%) scale(0.97);
+    transform: scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    transform: scale(1);
   }
 }
 

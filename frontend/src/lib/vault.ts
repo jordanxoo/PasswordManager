@@ -1,8 +1,6 @@
 import { encryptEntry, decryptEntry, type VaultEntry, type VaultInput } from "@pm/core";
 
-/** The secret half of an entry — encrypted before it leaves the device.
- *  `pinned` lives here (the backend has no such column) so it stays private
- *  and syncs across devices without any API change. */
+/** The secret half of an entry — encrypted before it leaves the device. */
 export interface VaultSecret {
   username: string;
   password: string;
