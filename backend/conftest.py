@@ -1,3 +1,4 @@
+import os
 import pytest
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -6,7 +7,10 @@ from app.main import app
 from app.database import Base, get_db
 from app.redis_client import get_redis
 
-TEST_DB_URL = "postgresql+asyncpg://pm_admin:pm_admin@localhost:5433/pm_db_test"
+TEST_DB_URL = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://pm_admin:pm_admin@localhost:5433/pm_db_test",
+)
 
 @pytest.fixture
 def mock_db():

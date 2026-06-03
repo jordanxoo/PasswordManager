@@ -6,8 +6,6 @@ from app.models.enums import Category
 from pydantic import field_validator,Field
 import base64
 class VaultCreate(BaseModel):
-    name: str = Field(max_length=255)
-    url: str = Field(max_length=2048)
     encrypted: str = Field(max_length=100_000)
     iv: str = Field(max_length=512)
     expires_at: Optional[datetime] = None
@@ -28,8 +26,6 @@ class VaultCreate(BaseModel):
         return v
 
 class VaultUpdate(BaseModel):
-    name: str
-    url: str
     encrypted: str
     iv: str
     expires_at: Optional[datetime] = None
@@ -52,8 +48,6 @@ class VaultUpdate(BaseModel):
 
 class VaultResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    name: str
-    url: str
     encrypted: str
     iv: str
     id: UUID
@@ -61,6 +55,10 @@ class VaultResponse(BaseModel):
     updated_at: datetime
     expires_at: Optional[datetime] = None
     category: Optional[Category] = None
+    pinned: bool = False
+
+class VaultPinRequest(BaseModel):
+    pinned: bool
 
 class VaultPaginatedResponse(BaseModel):
     items: list[VaultResponse]
@@ -89,8 +87,6 @@ class VaultHistoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     vault_id: UUID
-    name: str
-    url: str
     encrypted: str
     iv: str
     changed_at:datetime

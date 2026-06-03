@@ -4,8 +4,6 @@ from app.models.models import Vault
 import base64,json
 
 VAULT_PAYLOAD = {
-    "name" : "test_name",
-    "url": "test_url.com",
     "encrypted" : "test_encrypted",
     "iv": "dGVzdF9pdl9kYXRh"
 }
@@ -20,7 +18,7 @@ async def test_create_vault(client,auth_headers):
 
     assert response.status_code == 200
     data = response.json()
-    assert data["name"] == "test_name"
+    assert data["encrypted"] == "test_encrypted"
     assert "id" in data
 
 async def test_create_vault_persists_in_db(client,auth_headers,db):
@@ -29,20 +27,20 @@ async def test_create_vault_persists_in_db(client,auth_headers,db):
     result = await db.execute(select(Vault))
     vaults = result.scalars().all()
     assert len(vaults) == 1
-    assert vaults[0].name == "test_name"
+    assert vaults[0].encrypted == "test_encrypted"
 
 async def test_update_vault(client,auth_headers,db):
     create_response = await client.post("/vault/",json=VAULT_PAYLOAD,headers=auth_headers)
 
     vault_id = create_response.json()["id"]
-    updated_vault = {**VAULT_PAYLOAD,"name":"updated_name"}
+    updated_vault = {**VAULT_PAYLOAD,"encrypted":"updated_enc"}
     response = await client.put(f"/vault/{vault_id}",json=updated_vault,headers=auth_headers)
 
     assert response.status_code == 200
-    assert response.json()["name"] == "updated_name"
+    assert response.json()["encrypted"] == "updated_enc"
 
 async def test_delete_vault(client,auth_headers,db):
-    
+
     create_response = await client.post("/vault/",json=VAULT_PAYLOAD,headers=auth_headers)
     vault_id = create_response.json()["id"]
 
@@ -55,7 +53,7 @@ async def test_delete_vault(client,auth_headers,db):
     assert len(vaults) == 0
 
 async def test_delete_vault_forbidden(client,auth_headers,db):
-    
+
     await client.post("/auth/register",json = {
         "email": "test@email.com",
         "password": "test_password",
@@ -97,19 +95,19 @@ async def test_get_vaults_returns_only_own(client, db):
     })
     headers_b = {"Authorization": f"Bearer {login_b.json()['access_token']}"}
 
-    await client.post("/vault/", json={**VAULT_PAYLOAD, "name": "Client A Vault"},
+    await client.post("/vault/", json={**VAULT_PAYLOAD, "encrypted": "ClientAEnc"},
 headers=headers_a)
-    await client.post("/vault/", json={**VAULT_PAYLOAD, "name": "Client B Vault"},
+    await client.post("/vault/", json={**VAULT_PAYLOAD, "encrypted": "ClientBEnc"},
 headers=headers_b)
 
     resp_a = await client.get("/vault/", headers=headers_a)
     resp_b = await client.get("/vault/", headers=headers_b)
 
     assert len(resp_a.json()["items"]) == 1
-    assert resp_a.json()["items"][0]["name"] == "Client A Vault"
+    assert resp_a.json()["items"][0]["encrypted"] == "ClientAEnc"
 
     assert len(resp_b.json()["items"]) == 1
-    assert resp_b.json()["items"][0]["name"] == "Client B Vault"
+    assert resp_b.json()["items"][0]["encrypted"] == "ClientBEnc"
 
 
 async def test_create_vault_invalid_iv_too_short(client, auth_headers):
@@ -152,8 +150,6 @@ async def test_create_vault_exceeds_user_limit(client, auth_headers, db):
     await db.execute(insert(Vault).values([
         {
             "user_id": user_id,
-            "name": f"vault_{i}",
-            "url": "url.com",
             "encrypted": "enc",
             "iv": "dGVzdF9pdl9kYXRh"
         }
@@ -169,28 +165,27 @@ async def test_vault_history_created_on_update(client,auth_headers):
     create_resp = await client.post("/vault/",json=VAULT_PAYLOAD,headers=auth_headers)
     vault_id = create_resp.json()["id"]
 
-    await client.put(f"/vault/{vault_id}",json={**VAULT_PAYLOAD,"name":"updated"},headers=auth_headers)
+    await client.put(f"/vault/{vault_id}",json={**VAULT_PAYLOAD,"encrypted":"v2"},headers=auth_headers)
 
     history_resp = await client.get(f"/vault/{vault_id}/history",headers=auth_headers)
-    print("BODY: ",history_resp.json())
     assert history_resp.status_code == 200
     assert len(history_resp.json()) == 1
-    assert history_resp.json()[0]["name"] == VAULT_PAYLOAD["name"]
+    assert history_resp.json()[0]["encrypted"] == VAULT_PAYLOAD["encrypted"]
 
 
-async def test_vault_history_max_3_versions(client,auth_headers):
+async def test_vault_history_keeps_all_versions(client,auth_headers):
     create_resp = await client.post("/vault/",json=VAULT_PAYLOAD,headers=auth_headers)
 
     vault_id = create_resp.json()["id"]
 
     for i in range(4):
-        await client.put(f"/vault/{vault_id}", json={**VAULT_PAYLOAD,"name":f"v{i}"},
+        await client.put(f"/vault/{vault_id}", json={**VAULT_PAYLOAD,"encrypted":f"v{i}"},
                          headers=auth_headers)
-        
+
 
     history_resp = await client.get(f"/vault/{vault_id}/history",headers=auth_headers)
 
-    assert len(history_resp.json()) <= 3
+    assert len(history_resp.json()) == 4
 
 
 async def test_vault_restore(client,auth_headers):
@@ -198,19 +193,15 @@ async def test_vault_restore(client,auth_headers):
                                     headers=auth_headers)
     vault_id = create_resp.json()["id"]
 
-    await client.put(f"/vault/{vault_id}",json={**VAULT_PAYLOAD,"name":"new"},headers=auth_headers)
+    await client.put(f"/vault/{vault_id}",json={**VAULT_PAYLOAD,"encrypted":"new_enc"},headers=auth_headers)
 
     history_resp = await client.get(f"/vault/{vault_id}/history",
     headers=auth_headers)
-    print("STATUS:", history_resp.status_code)
-    print("BODY:", history_resp.json())
-    history_id = history_resp.json()[0]["id"]
-
     history_id = history_resp.json()[0]["id"]
 
     restore_resp = await client.post(f"/vault/{vault_id}/restore/{history_id}",headers=auth_headers)
     assert restore_resp.status_code == 200
-    assert restore_resp.json()["name"] == VAULT_PAYLOAD["name"]
+    assert restore_resp.json()["encrypted"] == VAULT_PAYLOAD["encrypted"]
 
 
 async def test_vault_history_requires_auth(client):
@@ -226,4 +217,3 @@ async def test_soft_deleted_vault_not_in_list(client,auth_headers):
 
     list_resp = await client.get("/vault/",headers=auth_headers)
     assert list_resp.json()["items"] == []
-

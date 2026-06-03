@@ -42,8 +42,12 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user)
 ):
-    await profile_service.change_password(db, user_id, data.current_password,
-                                        data.new_password, data.new_salt)
+    await profile_service.change_password(
+        db, user_id,
+        new_password=data.new_password,
+        current_password=data.current_password,
+        salt=data.new_salt,
+    )
     await log_event(db, EventType.PASSWORD_CHANGED, request.client.host,
                     request.headers.get("user-agent"), user_id)
     return {"message": "Password updated. Please log in again."}

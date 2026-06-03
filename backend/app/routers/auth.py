@@ -93,15 +93,16 @@ async def login(data: LoginRequest,
 
 @router.post("/refresh")
 async def refresh(request: Request,
+                   response: Response,
                    refresh_token: str = Cookie(None),
                    db: AsyncSession = Depends(get_db),
                    redis = Depends(get_redis)):
     if refresh_token is None:
         raise HTTPException(status_code=401,detail="No refresh token")
-    
+
 
     result =  await refresh_access_token(db,refresh_token,redis)
-    Response.set_cookie(
+    response.set_cookie(
         key="refresh_token",
         value= result["new_refresh_token"],
         httponly=True,

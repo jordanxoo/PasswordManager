@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+
+  /* Semantic surface tokens (role-named, so they read honestly in both themes):
+   * `surface` = raised things (cards, header, inputs, modal); `canvas` = the
+   * page background and recessed inset panels. The neutral `zinc-*` ramp is kept
+   * as-is — it's a scale, not an absolute colour, so remapping it under .dark is
+   * conventional. Only `white`/`canvas` needed renaming to avoid lying. */
+  --color-surface: #ffffff;
+  --color-canvas: #fafafa;
+}
+
+/*
+ * Dark theme. Tailwind v4 colour utilities resolve to `var(--color-*)`, so we
+ * theme the whole app by remapping the neutral ramp (inverted) plus the two
+ * surface tokens and a few accent surfaces under `.dark`. Components keep their
+ * utility classes untouched. "Dark" means a true #000 canvas with cards lifted
+ * just enough to read.
+ */
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --color-surface: #0a0a0a; /* cards, header, inputs, modal, primary-button text */
+  --color-canvas: #000000; /* page background + recessed inset panels */
+  --color-zinc-100: #1c1c1f; /* hover fills */
+  --color-zinc-200: #272729; /* borders */
+  --color-zinc-300: #3a3a3d; /* stronger borders (checkbox) */
+  --color-zinc-400: #71717a; /* placeholders, faint icons, focus border */
+  --color-zinc-500: #a1a1aa; /* muted text */
+  --color-zinc-600: #c7c7cc; /* ghost-button text */
+  --color-zinc-700: #d4d4d8; /* field labels */
+  --color-zinc-800: #e4e4e7; /* primary-button hover */
+  --color-zinc-900: #fafafa; /* primary text, primary-button bg, logo mark */
+  --color-zinc-950: #ffffff;
+
+  /* Accent surfaces, dimmed for a black background; their text is lightened. */
+  --color-red-50: #1a1011;
+  --color-red-200: #4a1f1f;
+  --color-red-300: #5b2826;
+  --color-red-700: #fca5a5;
+  --color-emerald-50: #0b1a14;
+  --color-emerald-200: #14402c;
+  --color-emerald-700: #6ee7b7;
+  --color-amber-50: #1f1605;
+  --color-amber-200: #4a3917;
+  --color-amber-800: #fcd34d;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-canvas text-zinc-900 antialiased;
+}
+
+/* Modal entrance — subtle fade + pop, driven by Radix data-state. */
+@keyframes pm-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Only scale/opacity — Tailwind centers the dialog via the `translate`
+   property, so animating `transform: translate(...)` here would double up. */
+@keyframes pm-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pm-overlay[data-state="open"] {
+  animation: pm-fade 120ms ease-out;
+}
+
+.pm-content[data-state="open"] {
+  animation: pm-pop 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}

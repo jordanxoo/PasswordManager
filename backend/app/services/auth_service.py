@@ -12,6 +12,7 @@ import pyotp
 import qrcode
 import io
 import base64
+from urllib.parse import quote, urlencode
 from app.metrics import login_failures_total
 logger = logging.getLogger(__name__)
 ph = PasswordHasher(time_cost = settings.ARGON2_TIME_COST,
@@ -206,7 +207,20 @@ async def setup_2fa(db,user_id):
     if user.totp_enabled:
         raise HTTPException(status_code=400,detail="2FA already enabled")
     secret = pyotp.random_base32()
-    uri = pyotp.totp.TOTP(secret).provisioning_uri(user.email,issuer_name ="PasswordManager")
+    # Build the otpauth URI by hand so every TOTP parameter is spelled out in the
+    # QR — issuer, account, algorithm, digits, period. pyotp.build_uri strips
+    # values equal to the defaults, so we'd otherwise lose digits/period. These
+    # MUST match what pyotp.TOTP(secret).verify() uses below (SHA1 / 6 digits / 30s).
+    issuer = "PasswordManager"
+    label = f"{quote(issuer)}:{quote(user.email)}"
+    params = urlencode({
+        "secret": secret,
+        "issuer": issuer,
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+    }).replace("+", "%20")
+    uri = f"otpauth://totp/{label}?{params}"
 
     qr = qrcode.make(uri)
     buffer = io.BytesIO()

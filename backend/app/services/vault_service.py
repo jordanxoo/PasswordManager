@@ -52,8 +52,6 @@ async def create_vault(db,user_id,data):
 
     vault = Vault(
         user_id = user_id,
-        name = data.name,
-        url = data.url,
         encrypted = data.encrypted,
         iv = data.iv,
         expires_at = data.expires_at,
@@ -83,31 +81,13 @@ async def update_vault(db, user_id, vault_id, data):
 
     history = VaultHistory(
         vault_id=vault.id,
-        name=vault.name,
-        url=vault.url,
         encrypted=vault.encrypted,
         iv=vault.iv
     )
     db.add(history)
 
-    count_result = await db.execute(
-        select(func.count()).select_from(VaultHistory).where(VaultHistory.vault_id == vault.id)
-    )
-    history_count = count_result.scalar()
+    # Keep the full change history (no trimming).
 
-    if history_count >= 3:
-        oldest = await db.execute(
-            select(VaultHistory)
-            .where(VaultHistory.vault_id == vault.id)
-            .order_by(VaultHistory.changed_at.asc())
-            .limit(1)
-        )
-        oldest_record = oldest.scalar_one_or_none()
-        if oldest_record:
-            await db.delete(oldest_record)
-
-    vault.name = data.name
-    vault.url = data.url
     vault.encrypted = data.encrypted
     vault.iv = data.iv
     vault.updated_at = datetime.now()
@@ -118,6 +98,19 @@ async def update_vault(db, user_id, vault_id, data):
     vault_operations_total.labels("update").inc()
     return vault
 
+
+
+async def set_pin(db, user_id, vault_id, pinned):
+    result = await db.execute(select(Vault).where(Vault.id == vault_id))
+    vault = result.scalar_one_or_none()
+
+    if vault is None or str(vault.user_id) != user_id:
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    vault.pinned = pinned
+    await db.commit()
+    await db.refresh(vault)
+    return vault
 
 
 async def delete_vault(db,user_id,vault_id):
@@ -159,8 +152,6 @@ async def import_vaults(db,user_id,entries):
     for entry in entries:
         vault = Vault(
             user_id = user_id,
-            name = entry.name,
-            url = entry.url,
             encrypted = entry.encrypted,
             iv = entry.iv,
             expires_at = entry.expires_at,
@@ -213,8 +204,6 @@ async def restore_vault(db,user_id,vault_id,history_id):
     if history is None:
         raise HTTPException(status_code=404,detail="History record not found")
     
-    vault.name = history.name
-    vault.url = history.url
     vault.encrypted = history.encrypted
     vault.iv = history.iv
     vault.updated_at = datetime.now()
