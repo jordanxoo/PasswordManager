@@ -1,0 +1,11 @@
+{
+  "name": "password-manager",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:core": "pnpm --filter @pm/core test"
+  }
+}

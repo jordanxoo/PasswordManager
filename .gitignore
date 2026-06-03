@@ -7,3 +7,9 @@
 .vscode/
 .idea/
 *.md
+
+# node / frontend
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
