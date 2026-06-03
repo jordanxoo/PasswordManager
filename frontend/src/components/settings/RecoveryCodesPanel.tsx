@@ -43,7 +43,7 @@ export function RecoveryCodesPanel({
         </p>
       </div>
 
-      <ul className="grid grid-cols-2 gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-3 font-mono text-sm text-zinc-800">
+      <ul className="grid grid-cols-2 gap-2 rounded-md border border-zinc-200 bg-canvas p-3 font-mono text-sm text-zinc-800">
         {codes.map((code) => (
           <li key={code} className="text-center tracking-wide">
             {code}

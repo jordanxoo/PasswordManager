@@ -11,9 +11,9 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantStyles: Record<Variant, string> = {
-  primary: "bg-zinc-900 text-white hover:bg-zinc-800 focus-visible:ring-zinc-900/15",
+  primary: "bg-zinc-900 text-surface hover:bg-zinc-800 focus-visible:ring-zinc-900/15",
   secondary:
-    "border border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50 focus-visible:ring-zinc-900/10",
+    "border border-zinc-200 bg-surface text-zinc-900 hover:bg-canvas focus-visible:ring-zinc-900/10",
   ghost: "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 focus-visible:ring-zinc-900/10",
 };
 

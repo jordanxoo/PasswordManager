@@ -98,7 +98,7 @@ export function Enable2faDialog({
 
           <div className="space-y-1.5">
             <p className="text-sm font-medium text-zinc-700">Can't scan? Enter this key</p>
-            <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-canvas px-3 py-2">
               <code className="flex-1 break-all font-mono text-[13px] text-zinc-700">
                 {setup.secret}
               </code>

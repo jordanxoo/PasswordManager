@@ -10,7 +10,7 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-zinc-200 bg-white">
+      <header className="border-b border-zinc-200 bg-surface">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
           <Link to="/" aria-label="Vault">
             <Logo />

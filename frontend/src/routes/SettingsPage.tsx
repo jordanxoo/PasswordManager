@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { ShieldCheck, ShieldOff } from "lucide-react";
+import { Palette, ShieldCheck, ShieldOff } from "lucide-react";
 import { useProfile, useRecoveryStatus } from "../lib/profileQueries";
 import { Button } from "../components/ui/Button";
 import { Enable2faDialog } from "../components/settings/Enable2faDialog";
 import { Disable2faDialog } from "../components/settings/Disable2faDialog";
+import { ThemeToggle } from "../components/settings/ThemeToggle";
 
 export function SettingsPage() {
   const { data: profile, isLoading } = useProfile();
@@ -19,7 +20,7 @@ export function SettingsPage() {
         <p className="mt-1 text-sm text-zinc-500">Manage your account security.</p>
       </div>
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-5">
+      <section className="rounded-xl border border-zinc-200 bg-surface p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-3">
             <span
@@ -60,6 +61,23 @@ export function SettingsPage() {
                 Enable
               </Button>
             ))}
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-zinc-200 bg-surface p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex gap-3">
+            <span className="mt-0.5 text-zinc-400">
+              <Palette size={20} />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-900">Appearance</h2>
+              <p className="mt-0.5 text-[13px] text-zinc-500">
+                Choose a light or dark theme.
+              </p>
+            </div>
+          </div>
+          <ThemeToggle />
         </div>
       </section>
 

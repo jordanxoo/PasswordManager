@@ -40,7 +40,7 @@ export function ViewItemDialog({ item, onClose, onEdit, onDelete }: Props) {
 
           <div className="space-y-1.5">
             <p className="text-sm font-medium text-zinc-700">Password</p>
-            <div className="flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5">
+            <div className="flex items-center gap-1 rounded-md border border-zinc-200 bg-canvas px-3 py-1.5">
               <span className="flex-1 truncate font-mono text-sm text-zinc-900">
                 {reveal ? item.password || "—" : "•".repeat(Math.min(item.password.length || 1, 16))}
               </span>
@@ -59,7 +59,7 @@ export function ViewItemDialog({ item, onClose, onEdit, onDelete }: Props) {
           {item.notes && (
             <div className="space-y-1.5">
               <p className="text-sm font-medium text-zinc-700">Notes</p>
-              <p className="whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+              <p className="whitespace-pre-wrap rounded-md border border-zinc-200 bg-canvas px-3 py-2 text-sm text-zinc-700">
                 {item.notes}
               </p>
             </div>
@@ -93,7 +93,7 @@ function ReadField({
   return (
     <div className="space-y-1.5">
       <p className="text-sm font-medium text-zinc-700">{label}</p>
-      <div className="flex items-center gap-1 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-1.5">
+      <div className="flex items-center gap-1 rounded-md border border-zinc-200 bg-canvas px-3 py-1.5">
         <span className="flex-1 truncate text-sm text-zinc-900">{value}</span>
         {children}
       </div>

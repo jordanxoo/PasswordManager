@@ -96,7 +96,7 @@ export function VaultPage() {
         ) : visible.length === 0 ? (
           <EmptyState hasItems={!!items && items.length > 0} onCreate={openCreate} />
         ) : (
-          <div className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+          <div className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-surface">
             <AnimatePresence initial={false}>
               {visible.map((item) => (
                 <motion.div
@@ -137,7 +137,7 @@ export function VaultPage() {
 function EmptyState({ hasItems, onCreate }: { hasItems: boolean; onCreate: () => void }) {
   if (hasItems) return <StateCard>No items match your search.</StateCard>;
   return (
-    <div className="rounded-xl border border-dashed border-zinc-300 bg-white py-16 text-center">
+    <div className="rounded-xl border border-dashed border-zinc-300 bg-surface py-16 text-center">
       <p className="text-sm font-medium text-zinc-900">No items yet</p>
       <p className="mx-auto mt-1 max-w-xs text-sm text-zinc-500">
         Add your first login — it's encrypted in your browser before it ever leaves this device.
@@ -154,7 +154,7 @@ function EmptyState({ hasItems, onCreate }: { hasItems: boolean; onCreate: () =>
 
 function StateCard({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white py-12 text-center text-sm text-zinc-500">
+    <div className="rounded-xl border border-zinc-200 bg-surface py-12 text-center text-sm text-zinc-500">
       {children}
     </div>
   );

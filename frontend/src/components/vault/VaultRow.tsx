@@ -12,7 +12,7 @@ interface Props {
 
 export function VaultRow({ item, onView, onTogglePin }: Props) {
   return (
-    <div className="flex items-center gap-1 px-2 transition-colors hover:bg-zinc-50">
+    <div className="flex items-center gap-1 px-2 transition-colors hover:bg-canvas">
       <button
         type="button"
         onClick={onView}

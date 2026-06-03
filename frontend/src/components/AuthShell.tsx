@@ -14,7 +14,7 @@ export function AuthShell({ title, subtitle, children }: AuthShellProps) {
         <div className="mb-8 flex justify-center">
           <Logo />
         </div>
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+        <div className="rounded-xl border border-zinc-200 bg-surface p-6 shadow-sm">
           <div className="mb-6">
             <h1 className="text-lg font-semibold tracking-tight text-zinc-900">{title}</h1>
             {subtitle && <p className="mt-1 text-sm text-zinc-500">{subtitle}</p>}
