@@ -203,7 +203,15 @@ async def restore_vault(db,user_id,vault_id,history_id):
 
     if history is None:
         raise HTTPException(status_code=404,detail="History record not found")
-    
+
+    # Snapshot the current version before overwriting, so a restore is itself
+    # reversible and never silently drops the live content.
+    db.add(VaultHistory(
+        vault_id=vault.id,
+        encrypted=vault.encrypted,
+        iv=vault.iv,
+    ))
+
     vault.encrypted = history.encrypted
     vault.iv = history.iv
     vault.updated_at = datetime.now()

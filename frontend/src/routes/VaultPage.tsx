@@ -7,6 +7,7 @@ import { Input } from "../components/ui/Input";
 import { VaultRow } from "../components/vault/VaultRow";
 import { VaultItemDialog } from "../components/vault/VaultItemDialog";
 import { ViewItemDialog } from "../components/vault/ViewItemDialog";
+import { VersionHistoryDialog } from "../components/vault/VersionHistoryDialog";
 import { DeleteItemDialog } from "../components/vault/DeleteItemDialog";
 import {
   useCreateManyVault,
@@ -25,6 +26,7 @@ export function VaultPage() {
   const [editing, setEditing] = useState<VaultItem | undefined>(undefined);
   const [viewing, setViewing] = useState<VaultItem | null>(null);
   const [deleting, setDeleting] = useState<VaultItem | null>(null);
+  const [historyFor, setHistoryFor] = useState<VaultItem | null>(null);
 
   // Filter, then pinned-first, then alphabetical.
   const visible = useMemo(() => {
@@ -48,6 +50,9 @@ export function VaultPage() {
     setEditing(item);
     setDialogOpen(true);
   };
+
+  // Resolve the open item against the live list so it reflects edits/restores.
+  const viewingLive = viewing ? (items?.find((i) => i.id === viewing.id) ?? viewing) : null;
 
   return (
     <div>
@@ -121,12 +126,24 @@ export function VaultPage() {
 
       <VaultItemDialog open={dialogOpen} onOpenChange={setDialogOpen} item={editing} />
       <ViewItemDialog
-        item={viewing}
+        item={viewingLive}
         onClose={() => setViewing(null)}
         onEdit={openEdit}
         onDelete={(it) => {
           setViewing(null);
           setDeleting(it);
+        }}
+        onHistory={(it) => {
+          setViewing(null);
+          setHistoryFor(it);
+        }}
+      />
+      <VersionHistoryDialog
+        item={historyFor}
+        onClose={() => {
+          // Return to the password view that was open behind the history dialog.
+          setViewing(historyFor);
+          setHistoryFor(null);
         }}
       />
       <DeleteItemDialog item={deleting} onClose={() => setDeleting(null)} />

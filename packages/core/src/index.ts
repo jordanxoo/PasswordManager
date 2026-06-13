@@ -31,6 +31,7 @@ export {
   recoveryStatusSchema,
   vaultEntrySchema,
   vaultPageSchema,
+  vaultHistorySchema,
 } from "./schemas";
 export type {
   LoginResponse,
@@ -40,4 +41,5 @@ export type {
   RecoveryStatus,
   VaultEntry,
   VaultPage,
+  VaultHistoryEntry,
 } from "./schemas";

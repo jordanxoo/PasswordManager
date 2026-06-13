@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Copy, Eye, EyeOff } from "lucide-react";
+import { Clock, Copy, Eye, EyeOff } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
@@ -13,9 +13,10 @@ interface Props {
   onClose: () => void;
   onEdit: (item: VaultItem) => void;
   onDelete: (item: VaultItem) => void;
+  onHistory: (item: VaultItem) => void;
 }
 
-export function ViewItemDialog({ item, onClose, onEdit, onDelete }: Props) {
+export function ViewItemDialog({ item, onClose, onEdit, onDelete, onHistory }: Props) {
   const [reveal, setReveal] = useState(false);
   useEffect(() => {
     setReveal(false);
@@ -73,7 +74,13 @@ export function ViewItemDialog({ item, onClose, onEdit, onDelete }: Props) {
             >
               Delete
             </Button>
-            <Button onClick={() => onEdit(item)}>Edit</Button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => onHistory(item)}>
+                <Clock size={16} />
+                History
+              </Button>
+              <Button onClick={() => onEdit(item)}>Edit</Button>
+            </div>
           </div>
         </div>
       )}

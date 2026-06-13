@@ -204,6 +204,25 @@ async def test_vault_restore(client,auth_headers):
     assert restore_resp.json()["encrypted"] == VAULT_PAYLOAD["encrypted"]
 
 
+async def test_vault_restore_is_reversible(client,auth_headers):
+    # Restoring must snapshot the current version first, so it's never lost.
+    create_resp = await client.post("/vault/",json=VAULT_PAYLOAD,headers=auth_headers)
+    vault_id = create_resp.json()["id"]
+
+    await client.put(f"/vault/{vault_id}",json={**VAULT_PAYLOAD,"encrypted":"new_enc"},headers=auth_headers)
+
+    history_resp = await client.get(f"/vault/{vault_id}/history",headers=auth_headers)
+    history_id = history_resp.json()[0]["id"]
+
+    # Restore back to the original (overwriting "new_enc").
+    await client.post(f"/vault/{vault_id}/restore/{history_id}",headers=auth_headers)
+
+    # The "new_enc" version we just overwrote should now be in history too.
+    history_after = (await client.get(f"/vault/{vault_id}/history",headers=auth_headers)).json()
+    assert len(history_after) == 2
+    assert any(h["encrypted"] == "new_enc" for h in history_after)
+
+
 async def test_vault_history_requires_auth(client):
     response = await client.get("/vault/uuid/history")
     assert response.status_code == 401

@@ -7,6 +7,7 @@ import {
   recoveryStatusSchema,
   vaultEntrySchema,
   vaultPageSchema,
+  vaultHistorySchema,
   type LoginResponse,
   type Profile,
   type TwoFactorSetup,
@@ -14,6 +15,7 @@ import {
   type RecoveryStatus,
   type VaultEntry,
   type VaultPage,
+  type VaultHistoryEntry,
 } from "./schemas";
 
 /** Thrown for any non-2xx response. `status` is the HTTP code, `message` the
@@ -261,6 +263,21 @@ export function createApiClient(baseUrl: string) {
 
     deleteVault(id: string): Promise<void> {
       return request(`/vault/${id}`, { method: "DELETE" });
+    },
+
+    /** Prior encrypted snapshots of an entry, newest first. */
+    vaultHistory(id: string): Promise<VaultHistoryEntry[]> {
+      return request(`/vault/${id}/history`, { method: "GET" }, vaultHistorySchema.array());
+    },
+
+    /** Roll an entry back to a snapshot; the current version is itself
+     *  snapshotted server-side first, so this stays reversible. */
+    restoreVault(vaultId: string, historyId: string): Promise<VaultEntry> {
+      return request(
+        `/vault/${vaultId}/restore/${historyId}`,
+        { method: "POST" },
+        vaultEntrySchema,
+      );
     },
   };
 }

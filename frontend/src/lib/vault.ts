@@ -3,6 +3,7 @@ import {
   decryptEntry,
   generatePassword as generatePasswordCore,
   type VaultEntry,
+  type VaultHistoryEntry,
   type VaultInput,
 } from "@pm/core";
 
@@ -49,6 +50,38 @@ export async function decodeEntry(entry: VaultEntry, key: CryptoKey): Promise<Va
     password: secret.password ?? "",
     notes: secret.notes ?? "",
   };
+}
+
+/** A decrypted past version of an entry, as shown in the history timeline. */
+export interface HistoryVersion {
+  id: string;
+  changedAt: string;
+  secret: VaultSecret;
+}
+
+/** Decrypt one history snapshot. Throws if the key is wrong. */
+export async function decodeHistory(
+  entry: VaultHistoryEntry,
+  key: CryptoKey,
+): Promise<HistoryVersion> {
+  const json = await decryptEntry({ encrypted: entry.encrypted, iv: entry.iv }, key);
+  const s = JSON.parse(json) as Partial<VaultSecret>;
+  return {
+    id: entry.id,
+    changedAt: entry.changed_at,
+    secret: {
+      name: s.name ?? "",
+      url: s.url ?? "",
+      username: s.username ?? "",
+      password: s.password ?? "",
+      notes: s.notes ?? "",
+    },
+  };
+}
+
+/** The secret fields that differ between two versions. */
+export function diffFields(a: VaultSecret, b: VaultSecret): (keyof VaultSecret)[] {
+  return (Object.keys(a) as (keyof VaultSecret)[]).filter((k) => a[k] !== b[k]);
 }
 
 /** Encrypt a draft into the API payload — name/url/username/password/notes all

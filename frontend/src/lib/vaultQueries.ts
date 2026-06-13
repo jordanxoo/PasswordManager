@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { useAuth } from "../stores/authStore";
-import { decodeEntry, encodeDraft, type VaultDraft, type VaultItem } from "./vault";
+import {
+  decodeEntry,
+  decodeHistory,
+  encodeDraft,
+  type HistoryVersion,
+  type VaultDraft,
+  type VaultItem,
+} from "./vault";
 
 const VAULT_KEY = ["vault"] as const;
 
@@ -46,6 +53,33 @@ export function useTogglePin() {
   return useMutation({
     mutationFn: (item: VaultItem) => api.setPin(item.id, !item.pinned),
     onSuccess: () => qc.invalidateQueries({ queryKey: VAULT_KEY }),
+  });
+}
+
+/** Fetch + decrypt an entry's prior versions (newest first). */
+export function useVaultHistory(id: string | null) {
+  const key = useAuth((s) => s.encryptionKey);
+  return useQuery({
+    queryKey: [...VAULT_KEY, id, "history"],
+    enabled: !!id && !!key,
+    queryFn: async (): Promise<HistoryVersion[]> => {
+      const entries = await api.vaultHistory(id!);
+      const decoded = await Promise.all(
+        entries.map((e) => decodeHistory(e, key!).catch(() => null)),
+      );
+      return decoded.filter((v): v is HistoryVersion => v !== null);
+    },
+  });
+}
+
+/** Roll an entry back to one of its snapshots, then refresh list + history. */
+export function useRestoreVault(vaultId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (historyId: string) => api.restoreVault(vaultId!, historyId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: VAULT_KEY });
+    },
   });
 }
 
