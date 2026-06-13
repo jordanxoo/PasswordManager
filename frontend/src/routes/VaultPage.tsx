@@ -13,9 +13,15 @@ import {
   useTogglePin,
   useVaultItems,
 } from "../lib/vaultQueries";
+import { useOrgs, useActiveVaultKey } from "../lib/orgQueries";
+import { useVaultContext } from "../stores/vaultContext";
 import { generateMockDrafts, type VaultItem } from "../lib/vault";
 
 export function VaultPage() {
+  const orgId = useVaultContext((s) => s.orgId);
+  const setOrgId = useVaultContext((s) => s.setOrgId);
+  const { data: orgs } = useOrgs();
+  const { canWrite } = useActiveVaultKey();
   const { data: items, isLoading, isError } = useVaultItems();
   const togglePin = useTogglePin();
   const createMany = useCreateManyVault();
@@ -53,15 +59,32 @@ export function VaultPage() {
     <div>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Vault</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Vault</h1>
+            <select
+              aria-label="Vault context"
+              value={orgId ?? ""}
+              onChange={(e) => setOrgId(e.target.value || null)}
+              className="h-8 rounded-md border border-zinc-200 bg-surface px-2 text-[13px] text-zinc-700"
+            >
+              <option value="">My vault</option>
+              {orgs?.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <p className="mt-1 text-sm text-zinc-500">
-            {items
-              ? `${items.length} ${items.length === 1 ? "item" : "items"}`
-              : "Your encrypted logins"}
+            {!canWrite
+              ? "Shared vault — read-only"
+              : items
+                ? `${items.length} ${items.length === 1 ? "item" : "items"}`
+                : "Your encrypted logins"}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {import.meta.env.DEV && (
+          {import.meta.env.DEV && canWrite && !orgId && (
             <Button
               variant="secondary"
               onClick={() => createMany.mutate(generateMockDrafts())}
@@ -71,10 +94,12 @@ export function VaultPage() {
               {createMany.isPending ? "Adding…" : "Mock data"}
             </Button>
           )}
-          <Button onClick={openCreate}>
-            <Plus size={16} />
-            New item
-          </Button>
+          {canWrite && (
+            <Button onClick={openCreate}>
+              <Plus size={16} />
+              New item
+            </Button>
+          )}
         </div>
       </div>
 
@@ -94,7 +119,11 @@ export function VaultPage() {
         ) : isError ? (
           <StateCard>Couldn't load your vault. Try reloading.</StateCard>
         ) : visible.length === 0 ? (
-          <EmptyState hasItems={!!items && items.length > 0} onCreate={openCreate} />
+          <EmptyState
+            hasItems={!!items && items.length > 0}
+            onCreate={openCreate}
+            canCreate={canWrite}
+          />
         ) : (
           <div className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-surface">
             <AnimatePresence initial={false}>
@@ -111,6 +140,7 @@ export function VaultPage() {
                     item={item}
                     onView={() => setViewing(item)}
                     onTogglePin={() => togglePin.mutate(item)}
+                    readOnly={!canWrite}
                   />
                 </motion.div>
               ))}
@@ -128,14 +158,24 @@ export function VaultPage() {
           setViewing(null);
           setDeleting(it);
         }}
+        readOnly={!canWrite}
       />
       <DeleteItemDialog item={deleting} onClose={() => setDeleting(null)} />
     </div>
   );
 }
 
-function EmptyState({ hasItems, onCreate }: { hasItems: boolean; onCreate: () => void }) {
+function EmptyState({
+  hasItems,
+  onCreate,
+  canCreate,
+}: {
+  hasItems: boolean;
+  onCreate: () => void;
+  canCreate: boolean;
+}) {
   if (hasItems) return <StateCard>No items match your search.</StateCard>;
+  if (!canCreate) return <StateCard>No shared items yet.</StateCard>;
   return (
     <div className="rounded-xl border border-dashed border-zinc-300 bg-surface py-16 text-center">
       <p className="text-sm font-medium text-zinc-900">No items yet</p>

@@ -9,6 +9,7 @@ import {
 } from "@pm/core";
 import { api } from "../lib/api";
 import { queryClient } from "../lib/queryClient";
+import { useVaultContext } from "./vaultContext";
 
 type Status = "anonymous" | "pending2fa" | "authenticated";
 
@@ -127,6 +128,7 @@ export const useAuth = create<AuthState>((set) => ({
     pendingKey = null;
     // Clear cached vault/org data so it never leaks into the next session.
     queryClient.clear();
+    useVaultContext.getState().setOrgId(null);
     set({ status: "anonymous", email: null, encryptionKey: null, privateKey: null, publicKey: null });
   },
 }));

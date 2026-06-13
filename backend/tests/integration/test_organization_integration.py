@@ -113,6 +113,77 @@ async def test_owner_cannot_be_removed_but_member_can_leave(e2e_client):
     assert [m["email"] for m in remaining] == ["owner@test.com"]
 
 
+async def _make_org_with_member(e2e_client):
+    owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
+    member_h, _ = await _register_and_login(e2e_client, "member@test.com", "PUB_MEMBER")
+    org = (await e2e_client.post("/organizations/", headers=owner_h,
+           json={"name": "Acme", "wrapped_org_key": "WRAP_OWNER"})).json()
+    await e2e_client.post(f"/organizations/{org['id']}/members", headers=owner_h,
+                          json={"email": "member@test.com", "role": "member",
+                                "wrapped_org_key": "WRAP_MEMBER"})
+    return org["id"], owner_h, member_h
+
+
+@pytest.mark.asyncio
+async def test_shared_vault_entry_visible_to_members_only(e2e_client):
+    org_id, owner_h, member_h = await _make_org_with_member(e2e_client)
+    stranger_h, _ = await _register_and_login(e2e_client, "stranger@test.com", "PUB_STR")
+
+    created = await e2e_client.post("/vault/", headers=owner_h,
+        json={"encrypted": "ORGSECRET", "iv": "AAAAAAAAAAAAAAAA", "org_id": org_id})
+    assert created.status_code == 200
+    assert created.json()["org_id"] == org_id
+
+    # Member sees it via the org-scoped listing.
+    member_list = await e2e_client.get(f"/vault/?org_id={org_id}", headers=member_h)
+    assert [i["encrypted"] for i in member_list.json()["items"]] == ["ORGSECRET"]
+
+    # A non-member is rejected.
+    stranger = await e2e_client.get(f"/vault/?org_id={org_id}", headers=stranger_h)
+    assert stranger.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_personal_and_org_vaults_are_isolated(e2e_client):
+    org_id, owner_h, _ = await _make_org_with_member(e2e_client)
+    await e2e_client.post("/vault/", headers=owner_h,
+        json={"encrypted": "MINE", "iv": "AAAAAAAAAAAAAAAA"})
+    await e2e_client.post("/vault/", headers=owner_h,
+        json={"encrypted": "SHARED", "iv": "AAAAAAAAAAAAAAAA", "org_id": org_id})
+
+    personal = await e2e_client.get("/vault/", headers=owner_h)
+    org = await e2e_client.get(f"/vault/?org_id={org_id}", headers=owner_h)
+    assert [i["encrypted"] for i in personal.json()["items"]] == ["MINE"]
+    assert [i["encrypted"] for i in org.json()["items"]] == ["SHARED"]
+
+
+@pytest.mark.asyncio
+async def test_member_write_policy_enforced(e2e_client):
+    org_id, owner_h, member_h = await _make_org_with_member(e2e_client)
+
+    # Default: members may write.
+    r = await e2e_client.post("/vault/", headers=member_h,
+        json={"encrypted": "BYMEMBER", "iv": "AAAAAAAAAAAAAAAA", "org_id": org_id})
+    assert r.status_code == 200
+
+    # Owner turns the policy off -> members become read-only.
+    s = await e2e_client.patch(f"/organizations/{org_id}/settings", headers=owner_h,
+        json={"member_write": False})
+    assert s.status_code == 200 and s.json()["member_write"] is False
+
+    denied = await e2e_client.post("/vault/", headers=member_h,
+        json={"encrypted": "NOPE", "iv": "AAAAAAAAAAAAAAAA", "org_id": org_id})
+    assert denied.status_code == 403
+    # ...but reading still works.
+    read = await e2e_client.get(f"/vault/?org_id={org_id}", headers=member_h)
+    assert read.status_code == 200
+
+    # A non-owner cannot change the setting.
+    nope = await e2e_client.patch(f"/organizations/{org_id}/settings", headers=member_h,
+        json={"member_write": True})
+    assert nope.status_code == 403
+
+
 @pytest.mark.asyncio
 async def test_add_member_without_keys_fails(e2e_client):
     owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")

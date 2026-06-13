@@ -19,6 +19,7 @@ export const organizationSchema = z.object({
   created_at: z.string(),
   role: z.string(),
   wrapped_org_key: z.string(),
+  member_write: z.boolean(),
 });
 export type Organization = z.infer<typeof organizationSchema>;
 
@@ -76,6 +77,7 @@ export const vaultEntrySchema = z.object({
   expires_at: z.string().nullable().optional(),
   category: z.string().nullable().optional(),
   pinned: z.boolean(),
+  org_id: z.string().nullable().optional(),
 });
 export type VaultEntry = z.infer<typeof vaultEntrySchema>;
 

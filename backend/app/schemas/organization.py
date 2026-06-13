@@ -20,6 +20,11 @@ class OrganizationResponse(BaseModel):
     # Organization row itself.
     role: OrgRole
     wrapped_org_key: str
+    member_write: bool
+
+
+class OrgSettingsRequest(BaseModel):
+    member_write: bool
 
 
 class MemberAddRequest(BaseModel):

@@ -280,20 +280,26 @@ export function createApiClient(baseUrl: string) {
       return request(`/organizations/${orgId}/members/${userId}`, { method: "DELETE" });
     },
 
-    // --- vault ---
-    listVault(cursor?: string): Promise<VaultPage> {
-      const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-      return request(`/vault/${qs}`, { method: "GET" }, vaultPageSchema);
+    /** Toggle whether plain members can edit the org's shared entries (owner only). */
+    updateOrgSettings(orgId: string, memberWrite: boolean): Promise<Organization> {
+      return request(
+        `/organizations/${orgId}/settings`,
+        { method: "PATCH", body: JSON.stringify({ member_write: memberWrite }) },
+        organizationSchema,
+      );
     },
 
+    // --- vault ---
     /** Fetch every entry by following the cursor. The client decrypts and
-     *  searches locally, so it needs the whole vault, not one page. */
-    async listAllVault(): Promise<VaultEntry[]> {
+     *  searches locally, so it needs the whole vault, not one page. `orgId`
+     *  selects an organization's shared vault instead of the personal one. */
+    async listAllVault(orgId?: string): Promise<VaultEntry[]> {
       const items: VaultEntry[] = [];
       let cursor: string | null = null;
       do {
         const params = new URLSearchParams({ limit: "100" });
         if (cursor) params.set("cursor", cursor);
+        if (orgId) params.set("org_id", orgId);
         const page = await request<VaultPage>(
           `/vault/?${params.toString()}`,
           { method: "GET" },
@@ -305,8 +311,9 @@ export function createApiClient(baseUrl: string) {
       return items;
     },
 
-    createVault(input: VaultInput): Promise<VaultEntry> {
-      return request("/vault/", { method: "POST", body: JSON.stringify(input) }, vaultEntrySchema);
+    createVault(input: VaultInput, orgId?: string): Promise<VaultEntry> {
+      const body = orgId ? { ...input, org_id: orgId } : input;
+      return request("/vault/", { method: "POST", body: JSON.stringify(body) }, vaultEntrySchema);
     },
 
     updateVault(id: string, input: VaultInput): Promise<VaultEntry> {

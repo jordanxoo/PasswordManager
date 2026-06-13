@@ -51,6 +51,9 @@ class Organization(Base):
     name = Column(String,nullable=False)
     owner_id = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=False)
     created_at = Column(DateTime,default=datetime.now)
+    # When True, any member may add/edit/delete shared entries; when False,
+    # only admins/owner can write and plain members are read-only. Owner-toggled.
+    member_write = Column(Boolean,nullable=False,default=True,server_default=sa.true())
 
 
 class OrganizationMembership(Base):

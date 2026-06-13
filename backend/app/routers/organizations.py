@@ -7,11 +7,11 @@ from app.dependencies import get_current_user, require_org_role
 from app.models.enums import OrgRole, EventType
 from app.schemas.organization import (
     OrganizationCreate, OrganizationResponse,
-    MemberAddRequest, MemberResponse, RoleUpdateRequest,
+    MemberAddRequest, MemberResponse, RoleUpdateRequest, OrgSettingsRequest,
 )
 from app.services.organization_service import (
     create_organization, list_user_organizations, list_members,
-    add_member, remove_member, change_member_role,
+    add_member, remove_member, change_member_role, update_settings,
 )
 from app.services.audit_service import log_event
 
@@ -32,6 +32,7 @@ async def create_organization_endpoint(
     return OrganizationResponse(
         id=org.id, name=org.name, created_at=org.created_at,
         role=membership.role, wrapped_org_key=membership.wrapped_org_key,
+        member_write=org.member_write,
     )
 
 
@@ -45,9 +46,25 @@ async def list_organizations_endpoint(
         OrganizationResponse(
             id=org.id, name=org.name, created_at=org.created_at,
             role=membership.role, wrapped_org_key=membership.wrapped_org_key,
+            member_write=org.member_write,
         )
         for org, membership in rows
     ]
+
+
+@router.patch("/{org_id}/settings", response_model=OrganizationResponse)
+async def update_settings_endpoint(
+    org_id: UUID,
+    data: OrgSettingsRequest,
+    db: AsyncSession = Depends(get_db),
+    membership = Depends(require_org_role(OrgRole.OWNER))):
+
+    org = await update_settings(db, org_id, data.member_write)
+    return OrganizationResponse(
+        id=org.id, name=org.name, created_at=org.created_at,
+        role=membership.role, wrapped_org_key=membership.wrapped_org_key,
+        member_write=org.member_write,
+    )
 
 
 @router.get("/{org_id}/members", response_model=list[MemberResponse])

@@ -8,6 +8,7 @@ import {
 } from "@pm/core";
 import { api } from "./api";
 import { useAuth } from "../stores/authStore";
+import { useVaultContext } from "../stores/vaultContext";
 
 const ORGS_KEY = ["organizations"] as const;
 const membersKey = (orgId: string) => ["organizations", orgId, "members"] as const;
@@ -81,4 +82,41 @@ export function useRemoveMember(orgId: string) {
     mutationFn: (userId: string) => api.removeMember(orgId, userId),
     onSuccess: () => qc.invalidateQueries({ queryKey: membersKey(orgId) }),
   });
+}
+
+export function useUpdateOrgSettings(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (memberWrite: boolean) => api.updateOrgSettings(orgId, memberWrite),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ORGS_KEY }),
+  });
+}
+
+const ROLE_RANK: Record<string, number> = { member: 1, admin: 2, owner: 3 };
+
+/**
+ * The AES key + write permission for the currently selected vault context.
+ * Personal => the user's own encryption key (always writable). Org => the org
+ * key, unwrapped once from the membership's wrapped copy with the private key
+ * and cached; writable per the org's member_write setting and the user's role.
+ */
+export function useActiveVaultKey() {
+  const orgId = useVaultContext((s) => s.orgId);
+  const encryptionKey = useAuth((s) => s.encryptionKey);
+  const privateKey = useAuth((s) => s.privateKey);
+  const { data: orgs } = useOrgs();
+  const org = orgId ? orgs?.find((o) => o.id === orgId) : undefined;
+
+  const orgKeyQuery = useQuery({
+    queryKey: ["orgKey", orgId],
+    enabled: !!org && !!privateKey,
+    staleTime: Infinity,
+    queryFn: () => unwrapOrgKey(org!.wrapped_org_key, privateKey!),
+  });
+
+  if (!orgId) {
+    return { key: encryptionKey ?? undefined, isLoading: false, canWrite: true };
+  }
+  const canWrite = !!org && (org.member_write || ROLE_RANK[org.role] >= ROLE_RANK.admin);
+  return { key: orgKeyQuery.data, isLoading: orgKeyQuery.isLoading, canWrite };
 }

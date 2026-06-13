@@ -13,9 +13,11 @@ interface Props {
   onClose: () => void;
   onEdit: (item: VaultItem) => void;
   onDelete: (item: VaultItem) => void;
+  /** Hide Edit/Delete for read-only org members. */
+  readOnly?: boolean;
 }
 
-export function ViewItemDialog({ item, onClose, onEdit, onDelete }: Props) {
+export function ViewItemDialog({ item, onClose, onEdit, onDelete, readOnly }: Props) {
   const [reveal, setReveal] = useState(false);
   useEffect(() => {
     setReveal(false);
@@ -65,16 +67,18 @@ export function ViewItemDialog({ item, onClose, onEdit, onDelete }: Props) {
             </div>
           )}
 
-          <div className="flex items-center justify-between pt-2">
-            <Button
-              variant="secondary"
-              className="border-red-200 text-red-600 hover:bg-red-50"
-              onClick={() => onDelete(item)}
-            >
-              Delete
-            </Button>
-            <Button onClick={() => onEdit(item)}>Edit</Button>
-          </div>
+          {!readOnly && (
+            <div className="flex items-center justify-between pt-2">
+              <Button
+                variant="secondary"
+                className="border-red-200 text-red-600 hover:bg-red-50"
+                onClick={() => onDelete(item)}
+              >
+                Delete
+              </Button>
+              <Button onClick={() => onEdit(item)}>Edit</Button>
+            </div>
+          )}
         </div>
       )}
     </Modal>

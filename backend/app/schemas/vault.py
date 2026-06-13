@@ -10,6 +10,9 @@ class VaultCreate(BaseModel):
     iv: str = Field(max_length=512)
     expires_at: Optional[datetime] = None
     category: Optional[Category] = None
+    # When set, the entry is shared with this organization (encrypted with the
+    # org key) instead of being personal.
+    org_id: Optional[UUID] = None
 
     @field_validator("iv")
     @classmethod
@@ -56,6 +59,7 @@ class VaultResponse(BaseModel):
     expires_at: Optional[datetime] = None
     category: Optional[Category] = None
     pinned: bool = False
+    org_id: Optional[UUID] = None
 
 class VaultPinRequest(BaseModel):
     pinned: bool

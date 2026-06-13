@@ -9,6 +9,7 @@ import {
   useAddMember,
   useChangeRole,
   useRemoveMember,
+  useUpdateOrgSettings,
 } from "../lib/orgQueries";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -29,6 +30,7 @@ export function OrganizationDetailPage() {
   const addMember = useAddMember(org);
   const changeRole = useChangeRole(orgId);
   const removeMember = useRemoveMember(orgId);
+  const updateSettings = useUpdateOrgSettings(orgId);
 
   const [open, setOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -77,6 +79,26 @@ export function OrganizationDetailPage() {
           </Button>
         )}
       </div>
+
+      {isOwner && org && (
+        <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 bg-surface p-4">
+          <span>
+            <span className="block text-sm font-medium text-zinc-900">
+              Members can add &amp; edit shared items
+            </span>
+            <span className="mt-0.5 block text-[13px] text-zinc-500">
+              When off, only admins and the owner can change the shared vault.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={org.member_write}
+            disabled={updateSettings.isPending}
+            onChange={(e) => updateSettings.mutate(e.target.checked)}
+          />
+        </label>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-zinc-500">Loading…</p>

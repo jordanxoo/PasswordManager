@@ -107,6 +107,18 @@ async def remove_member(db, org_id, target_user_id, acting_membership):
     return {"message": "removed"}
 
 
+async def update_settings(db, org_id, member_write):
+    """Update org-level settings. Caller must be OWNER (enforced at the router)."""
+    org = (await db.execute(
+        select(Organization).where(Organization.id == org_id))).scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    org.member_write = member_write
+    await db.commit()
+    await db.refresh(org)
+    return org
+
+
 async def change_member_role(db, org_id, target_user_id, new_role):
     """Change a member's role. Caller must be OWNER (enforced at the router).
 
