@@ -7,6 +7,9 @@ import {
   recoveryStatusSchema,
   vaultEntrySchema,
   vaultPageSchema,
+  organizationSchema,
+  orgMemberSchema,
+  publicKeySchema,
   type LoginResponse,
   type Profile,
   type TwoFactorSetup,
@@ -14,7 +17,11 @@ import {
   type RecoveryStatus,
   type VaultEntry,
   type VaultPage,
+  type Organization,
+  type OrgMember,
+  type PublicKey,
 } from "./schemas";
+import { z } from "zod";
 
 /** Thrown for any non-2xx response. `status` is the HTTP code, `message` the
  *  server's `detail` when available. */
@@ -40,6 +47,13 @@ export interface VaultInput {
 export type LoginResult =
   | { requires2fa: true }
   | ({ requires2fa: false } & LoginResponse);
+
+/** Wrapped keypair as sent to the server (snake_case wire format). */
+export interface KeypairPayload {
+  public_key: string;
+  encrypted_private_key: string;
+  private_key_iv: string;
+}
 
 /**
  * Stateful API client. Holds the short-lived access token in memory and
@@ -114,10 +128,10 @@ export function createApiClient(baseUrl: string) {
     },
 
     // --- auth ---
-    register(email: string, authHash: string, salt: string): Promise<void> {
+    register(email: string, authHash: string, salt: string, keys?: KeypairPayload): Promise<void> {
       return request("/auth/register", {
         method: "POST",
-        body: JSON.stringify({ email, password: authHash, salt }),
+        body: JSON.stringify({ email, password: authHash, salt, ...keys }),
       });
     },
 
@@ -212,6 +226,58 @@ export function createApiClient(baseUrl: string) {
     /** How many one-time recovery codes are still unused. */
     recoveryStatus(): Promise<RecoveryStatus> {
       return request("/auth/2fa/recovery/status", { method: "GET" }, recoveryStatusSchema);
+    },
+
+    // --- keypair (org sharing) ---
+    /** Backfill the keypair for a legacy account that has none yet. */
+    uploadKeys(keys: KeypairPayload): Promise<void> {
+      return request("/profile/keys", { method: "POST", body: JSON.stringify(keys) });
+    },
+
+    /** Fetch another user's public key (to wrap an org key for them). */
+    getPublicKey(email: string): Promise<PublicKey> {
+      return request(
+        `/profile/public-key?email=${encodeURIComponent(email)}`,
+        { method: "GET" },
+        publicKeySchema,
+      );
+    },
+
+    // --- organizations ---
+    listOrgs(): Promise<Organization[]> {
+      return request("/organizations/", { method: "GET" }, z.array(organizationSchema));
+    },
+
+    createOrg(name: string, wrappedOrgKey: string): Promise<Organization> {
+      return request(
+        "/organizations/",
+        { method: "POST", body: JSON.stringify({ name, wrapped_org_key: wrappedOrgKey }) },
+        organizationSchema,
+      );
+    },
+
+    listMembers(orgId: string): Promise<OrgMember[]> {
+      return request(`/organizations/${orgId}/members`, { method: "GET" }, z.array(orgMemberSchema));
+    },
+
+    addMember(orgId: string, email: string, role: string, wrappedOrgKey: string): Promise<OrgMember> {
+      return request(
+        `/organizations/${orgId}/members`,
+        { method: "POST", body: JSON.stringify({ email, role, wrapped_org_key: wrappedOrgKey }) },
+        orgMemberSchema,
+      );
+    },
+
+    changeMemberRole(orgId: string, userId: string, role: string): Promise<OrgMember> {
+      return request(
+        `/organizations/${orgId}/members/${userId}`,
+        { method: "PATCH", body: JSON.stringify({ role }) },
+        orgMemberSchema,
+      );
+    },
+
+    removeMember(orgId: string, userId: string): Promise<void> {
+      return request(`/organizations/${orgId}/members/${userId}`, { method: "DELETE" });
     },
 
     // --- vault ---

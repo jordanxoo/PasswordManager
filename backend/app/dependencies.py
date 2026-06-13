@@ -86,3 +86,25 @@ async def require_admin(user_id: str = Depends(get_current_user),
     if user is None or user.role != Role.ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user_id
+
+
+def require_org_role(min_role):
+    """Dependency factory enforcing organization membership + a minimum role.
+
+    Resolves the `org_id` path param, loads the current user's membership and
+    checks it against the role hierarchy. Returns the membership on success."""
+    from app.models.enums import OrgRole
+    from app.services.organization_service import ROLE_RANK
+
+    async def dependency(org_id,
+                         user_id: str = Depends(get_current_user),
+                         db: AsyncSession = Depends(get_db)):
+        from app.services.organization_service import get_membership
+        membership = await get_membership(db, org_id, user_id)
+        if membership is None:
+            raise HTTPException(status_code=403, detail="Not a member of this organization")
+        if ROLE_RANK[membership.role] < ROLE_RANK[min_role]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return membership
+
+    return dependency

@@ -6,6 +6,7 @@ from app.schemas.profile import (
     ProfileResponse, ChangeEmailRequest, ChangePasswordRequest,
       DeleteAccountRequest, SessionResponse, AuditLogResponse
   )
+from app.schemas.organization import PublicKeyResponse, UploadKeysRequest
 from app.services import profile_service
 from app.services.audit_service import log_event
 from app.models.enums import EventType
@@ -101,4 +102,32 @@ async def get_audit(
     user_id: str = Depends(get_current_user)
 ):
     return await profile_service.get_audit_log(db, user_id)
+
+
+@router.post("/keys")
+async def upload_keys(
+    data: UploadKeysRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
+):
+    """Backfill the asymmetric keypair for an account created before key support
+    existed. Idempotent-ish: only sets keys when they are not already present."""
+    await profile_service.set_keys(
+        db, user_id,
+        public_key=data.public_key,
+        encrypted_private_key=data.encrypted_private_key,
+        private_key_iv=data.private_key_iv,
+    )
+    return {"message": "keys saved"}
+
+
+@router.get("/public-key", response_model=PublicKeyResponse)
+async def get_public_key(
+    email: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user)
+):
+    """Fetch another user's public key so the caller can wrap an org key for
+    them when adding them to an organization."""
+    return await profile_service.get_public_key(db, email)
 

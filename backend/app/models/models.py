@@ -1,9 +1,9 @@
-from sqlalchemy import Column,String,DateTime,ForeignKey,JSON, Boolean
+from sqlalchemy import Column,String,DateTime,ForeignKey,JSON, Boolean,UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from uuid import uuid4
 from datetime import datetime
 from app.database import Base
-from app.models.enums import EventType,Role,Category
+from app.models.enums import EventType,Role,Category,OrgRole
 import sqlalchemy as sa
 
 
@@ -19,12 +19,21 @@ class User(Base):
     totp_enabled = Column(Boolean,nullable=False,default=False)
     role = Column(sa.Enum(Role),nullable=False,default=Role.USER)
     is_blocked = Column(Boolean,default=False)
+    # Asymmetric keypair for organization secret sharing (zero-knowledge).
+    # public_key: SPKI base64, stored in plaintext. private key is encrypted
+    # client-side with the user's AES encryption key — server only sees ciphertext.
+    public_key = Column(String,nullable=True)
+    encrypted_private_key = Column(String,nullable=True)
+    private_key_iv = Column(String,nullable=True)
 
 class Vault(Base):
     __tablename__ = "vaults"
 
     id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
     user_id = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=False)
+    # When set, the entry is org-shared (encrypted with the org key) instead of
+    # personal. user_id then identifies the creator. Personal entry => org_id NULL.
+    org_id = Column(UUID(as_uuid=True),ForeignKey("organizations.id"),nullable=True)
     encrypted = Column(String,nullable=False)
     iv = Column(String,nullable=False)
     created_at = Column(DateTime,default= datetime.now)
@@ -33,6 +42,29 @@ class Vault(Base):
     category = Column(sa.Enum(Category),nullable=True)
     is_deleted = Column(Boolean,default=False,nullable=False)
     pinned = Column(Boolean,default=False,nullable=False,server_default=sa.false())
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
+    name = Column(String,nullable=False)
+    owner_id = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=False)
+    created_at = Column(DateTime,default=datetime.now)
+
+
+class OrganizationMembership(Base):
+    __tablename__ = "organization_memberships"
+    __table_args__ = (UniqueConstraint("org_id","user_id",name="uq_org_member"),)
+
+    id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
+    org_id = Column(UUID(as_uuid=True),ForeignKey("organizations.id"),nullable=False)
+    user_id = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=False)
+    role = Column(sa.Enum(OrgRole),nullable=False,default=OrgRole.MEMBER)
+    # The org's AES key, wrapped (RSA-OAEP) with this member's public key.
+    # Each member unwraps it with their own private key — server never sees it.
+    wrapped_org_key = Column(String,nullable=False)
+    created_at = Column(DateTime,default=datetime.now)
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"

@@ -20,8 +20,9 @@ ph = PasswordHasher(time_cost = settings.ARGON2_TIME_COST,
 
 
 
-async def register_user(db,email,password,salt):
-    
+async def register_user(db,email,password,salt,
+                        public_key=None,encrypted_private_key=None,private_key_iv=None):
+
     result = await db.execute(select(User).where(User.email == email))
 
     user = result.scalar_one_or_none()
@@ -34,8 +35,10 @@ async def register_user(db,email,password,salt):
     user = User(
         email = email,
         password = hashed_password,
-        salt = salt
-
+        salt = salt,
+        public_key = public_key,
+        encrypted_private_key = encrypted_private_key,
+        private_key_iv = private_key_iv,
     )
 
     try:
@@ -102,9 +105,12 @@ async def login_user(db,redis,email,password):
         return {"requires_2fa":True,
                 "pending_token":pending_token}
     return {"access_token" : jwt_token,
-            "refresh_token": refresh_token, 
+            "refresh_token": refresh_token,
             "salt" : user.salt,
-            "user_id": str(user.id)}
+            "user_id": str(user.id),
+            "public_key": user.public_key,
+            "encrypted_private_key": user.encrypted_private_key,
+            "private_key_iv": user.private_key_iv}
 
 
 async def refresh_access_token(db, token, redis):
@@ -320,5 +326,8 @@ async def validate_2fa_code(db,redis,pending_token,code):
         "refresh_token":refresh_token,
         "salt": user.salt,
         "user_id": str(user.id),
-        "email": user.email
+        "email": user.email,
+        "public_key": user.public_key,
+        "encrypted_private_key": user.encrypted_private_key,
+        "private_key_iv": user.private_key_iv
     }

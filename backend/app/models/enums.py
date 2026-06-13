@@ -31,10 +31,21 @@ class EventType(enum.Enum):
     RECOVERY_CODES_USED = "recovery_codes_used"
     RECOVERY_CODE_FAILED = "recovery_code_failed"
 
+    ORG_CREATED = "org_created"
+    ORG_MEMBER_ADDED = "org_member_added"
+    ORG_MEMBER_REMOVED = "org_member_removed"
+    ORG_ROLE_CHANGED = "org_role_changed"
+
 
 class Role(enum.Enum):
     USER = "user"
     ADMIN = "admin"
+
+
+class OrgRole(enum.Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
 
 
 class Category(enum.Enum):
