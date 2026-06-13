@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Eye, EyeOff, RefreshCw } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Eye, EyeOff, Dices } from "lucide-react";
 import { ApiError } from "@pm/core";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
@@ -11,7 +12,8 @@ import { Field } from "../ui/Field";
 import { Textarea } from "../ui/Textarea";
 import { IconButton } from "../ui/IconButton";
 import { ErrorBanner } from "../ui/ErrorBanner";
-import { generatePassword, type VaultDraft, type VaultItem } from "../../lib/vault";
+import { PasswordGenerator } from "../generator/PasswordGenerator";
+import { type VaultDraft, type VaultItem } from "../../lib/vault";
 import { useCreateVault, useUpdateVault } from "../../lib/vaultQueries";
 
 const schema = z.object({
@@ -36,6 +38,7 @@ export function VaultItemDialog({ open, onOpenChange, item }: Props) {
   const create = useCreateVault();
   const update = useUpdateVault();
   const [showPassword, setShowPassword] = useState(false);
+  const [showGenerator, setShowGenerator] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const {
@@ -51,6 +54,7 @@ export function VaultItemDialog({ open, onOpenChange, item }: Props) {
     if (!open) return;
     setFormError(null);
     setShowPassword(false);
+    setShowGenerator(false);
     reset(
       item
         ? {
@@ -110,16 +114,39 @@ export function VaultItemDialog({ open, onOpenChange, item }: Props) {
               </div>
             </div>
             <IconButton
-              label="Generate password"
-              className="h-10 w-10 border border-zinc-200"
-              onClick={() => {
-                setValue("password", generatePassword(), { shouldValidate: true });
-                setShowPassword(true);
-              }}
+              label="Password generator"
+              aria-expanded={showGenerator}
+              className={
+                showGenerator
+                  ? "h-10 w-10 border border-zinc-300 bg-zinc-100 text-zinc-900"
+                  : "h-10 w-10 border border-zinc-200"
+              }
+              onClick={() => setShowGenerator((v) => !v)}
             >
-              <RefreshCw size={16} />
+              <Dices size={16} />
             </IconButton>
           </div>
+          <AnimatePresence initial={false}>
+            {showGenerator && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 rounded-lg border border-zinc-200 bg-canvas p-4">
+                  <PasswordGenerator
+                    onUse={(pw) => {
+                      setValue("password", pw, { shouldValidate: true });
+                      setShowPassword(true);
+                      setShowGenerator(false);
+                    }}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </Field>
         <Field label="Notes" htmlFor="v-notes">
           <Textarea id="v-notes" rows={3} placeholder="Optional" {...register("notes")} />

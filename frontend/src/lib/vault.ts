@@ -1,4 +1,10 @@
-import { encryptEntry, decryptEntry, type VaultEntry, type VaultInput } from "@pm/core";
+import {
+  encryptEntry,
+  decryptEntry,
+  generatePassword as generatePasswordCore,
+  type VaultEntry,
+  type VaultInput,
+} from "@pm/core";
 
 /** The full entry content — everything here is encrypted before it leaves the
  *  device (full zero-knowledge: the server only ever sees ciphertext). */
@@ -59,20 +65,11 @@ export async function encodeDraft(draft: VaultDraft, key: CryptoKey): Promise<Va
   return { encrypted, iv };
 }
 
-const ALPHABET =
-  "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_=+";
-
-/** Cryptographically-random password using a no-modulo-bias rejection sampler. */
+/** Quick all-classes password at the default settings — used for one-click
+ *  generation and mock data. The full, configurable generator lives in
+ *  `@pm/core` and is surfaced by the `<PasswordGenerator>` component. */
 export function generatePassword(length = 20): string {
-  const max = Math.floor(256 / ALPHABET.length) * ALPHABET.length;
-  let out = "";
-  while (out.length < length) {
-    const bytes = crypto.getRandomValues(new Uint8Array(length));
-    for (let i = 0; i < bytes.length && out.length < length; i++) {
-      if (bytes[i] < max) out += ALPHABET[bytes[i] % ALPHABET.length];
-    }
-  }
-  return out;
+  return generatePasswordCore({ length });
 }
 
 // --- dev only: realistic-ish mock entries for testing ---
