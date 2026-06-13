@@ -9,6 +9,7 @@ import { CopyButton } from "../ui/CopyButton";
 import { ErrorBanner } from "../ui/ErrorBanner";
 import { useVaultHistory, useRestoreVault } from "../../lib/vaultQueries";
 import { diffFields, type VaultItem, type VaultSecret } from "../../lib/vault";
+import { relativeTime, formatDateTime } from "../../lib/datetime";
 import { cn } from "../../lib/cn";
 
 const FIELD_LABEL: Record<keyof VaultSecret, string> = {
@@ -20,27 +21,6 @@ const FIELD_LABEL: Record<keyof VaultSecret, string> = {
 };
 
 const CURRENT_ID = "__current__";
-
-/** The backend sends naive UTC timestamps (no offset); mark them as UTC so the
- *  browser doesn't reinterpret them in local time and shift the clock. */
-function serverDate(iso: string): Date {
-  const hasTz = /[zZ]|[+-]\d{2}:?\d{2}$/.test(iso);
-  return new Date(hasTz ? iso : `${iso}Z`);
-}
-
-function relativeTime(iso: string): string {
-  const sec = Math.round((Date.now() - serverDate(iso).getTime()) / 1000);
-  if (sec < 60) return "just now";
-  const min = Math.round(sec / 60);
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} hr ago`;
-  const day = Math.round(hr / 24);
-  if (day < 30) return `${day} day${day > 1 ? "s" : ""} ago`;
-  const mo = Math.round(day / 30);
-  if (mo < 12) return `${mo} mo ago`;
-  return `${Math.round(mo / 12)} yr ago`;
-}
 
 const toSecret = (item: VaultItem): VaultSecret => ({
   name: item.name,
@@ -142,7 +122,7 @@ export function VersionHistoryDialog({ item, onClose }: Props) {
                     <>
                       <p
                         className="text-sm font-medium text-zinc-900"
-                        title={serverDate(v.changedAt).toLocaleString()}
+                        title={formatDateTime(v.changedAt)}
                       >
                         {relativeTime(v.changedAt)}
                       </p>
