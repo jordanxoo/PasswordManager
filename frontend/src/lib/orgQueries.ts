@@ -16,13 +16,17 @@ const ORGS_KEY = ["organizations"] as const;
 const membersKey = (orgId: string) => ["organizations", orgId, "members"] as const;
 const invitesKey = (orgId: string) => ["organizations", orgId, "invitations"] as const;
 
-/** Organizations the current user belongs to (with role + wrapped org key). */
+/** Organizations the current user belongs to (with role + wrapped org key).
+ *  While any membership is pending confirmation (no org key yet), poll so the
+ *  user joins automatically once an admin confirms them — no manual refresh. */
 export function useOrgs() {
   const encryptionKey = useAuth((s) => s.encryptionKey);
   return useQuery({
     queryKey: ORGS_KEY,
     enabled: !!encryptionKey,
     queryFn: () => api.listOrgs(),
+    refetchInterval: (query) =>
+      query.state.data?.some((o) => !o.wrapped_org_key) ? 10_000 : false,
   });
 }
 
@@ -47,6 +51,9 @@ export function useMembers(orgId: string) {
     queryFn: () => api.listMembers(orgId),
   });
 }
+
+/** Query key for an org's member list (exported so pages can invalidate it). */
+export const orgMembersKey = membersKey;
 
 /**
  * Add a member: unwrap the org key with our private key, then re-wrap it with
@@ -102,6 +109,8 @@ export function useInvitations(orgId: string, enabled = true) {
     queryKey: invitesKey(orgId),
     enabled,
     queryFn: () => api.listInvitations(orgId),
+    // Poll while invites are pending so an accepted one drops off automatically.
+    refetchInterval: (query) => ((query.state.data?.length ?? 0) > 0 ? 10_000 : false),
   });
 }
 

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, KeyRound, MailPlus, Trash2 } from "lucide-react";
 import { ApiError } from "@pm/core";
@@ -14,6 +15,7 @@ import {
   useRevokeInvitation,
   useConfirmMember,
   useRotateOrgKey,
+  orgMembersKey,
 } from "../lib/orgQueries";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -33,12 +35,22 @@ export function OrganizationDetailPage() {
   const { data: orgs } = useOrgs();
   const org = orgs?.find((o) => o.id === orgId);
 
+  // A member only truly manages the org once confirmed (they hold the org key);
+  // a pending admin can't wrap/confirm/rotate anything yet.
+  const amConfirmed = !!org?.wrapped_org_key;
   const myRank = org ? ROLE_RANK[org.role] ?? 0 : 0;
-  const canManage = myRank >= ROLE_RANK.admin;
-  const isOwner = myRank >= ROLE_RANK.owner;
+  const canManage = amConfirmed && myRank >= ROLE_RANK.admin;
+  const isOwner = amConfirmed && myRank >= ROLE_RANK.owner;
 
-  const { data: members, isLoading } = useMembers(orgId);
+  const qc = useQueryClient();
+  // useInvitations polls while invites are pending; when one is accepted it
+  // drops off the list — that content change refetches members so the new
+  // pending member (and its Confirm button) appears without a manual refresh.
   const { data: invitations } = useInvitations(orgId, canManage);
+  const { data: members, isLoading } = useMembers(orgId);
+  useEffect(() => {
+    qc.invalidateQueries({ queryKey: orgMembersKey(orgId) });
+  }, [invitations, qc, orgId]);
   const changeRole = useChangeRole(orgId);
   const removeMember = useRemoveMember(orgId);
   const updateSettings = useUpdateOrgSettings(orgId);
