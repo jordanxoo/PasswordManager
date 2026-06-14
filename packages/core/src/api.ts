@@ -7,6 +7,7 @@ import {
   recoveryStatusSchema,
   vaultEntrySchema,
   vaultPageSchema,
+  vaultHistorySchema,
   organizationSchema,
   orgMemberSchema,
   publicKeySchema,
@@ -22,6 +23,7 @@ import {
   type RecoveryStatus,
   type VaultEntry,
   type VaultPage,
+  type VaultHistoryEntry,
   type Organization,
   type OrgMember,
   type PublicKey,
@@ -488,6 +490,21 @@ export function createApiClient(baseUrl: string) {
         `/organizations/${orgId}/audit?${params.toString()}`,
         { method: "GET" },
         z.array(orgAuditEntrySchema),
+      );
+    },
+
+    /** Prior encrypted snapshots of an entry, newest first. */
+    vaultHistory(id: string): Promise<VaultHistoryEntry[]> {
+      return request(`/vault/${id}/history`, { method: "GET" }, vaultHistorySchema.array());
+    },
+
+    /** Roll an entry back to a snapshot; the current version is itself
+     *  snapshotted server-side first, so this stays reversible. */
+    restoreVault(vaultId: string, historyId: string): Promise<VaultEntry> {
+      return request(
+        `/vault/${vaultId}/restore/${historyId}`,
+        { method: "POST" },
+        vaultEntrySchema,
       );
     },
   };

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr                                                 
 from uuid import UUID
-from datetime import datetime                                                            
+from datetime import datetime
+from app.schemas.types import UTCDateTime                                                            
 from app.models.enums import Role                                                        
 
                                                                                         
@@ -10,7 +11,7 @@ class UserResponse(BaseModel):
     role: Role
     is_blocked: bool
     totp_enabled: bool
-    created_at: datetime                                                                 
+    created_at: UTCDateTime                                                                 
 
     model_config = {"from_attributes": True}                                             
                 

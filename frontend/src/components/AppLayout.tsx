@@ -1,5 +1,5 @@
 import { Link, Outlet } from "react-router-dom";
-import { Building2, Settings } from "lucide-react";
+import { Building2, KeyRound, Settings } from "lucide-react";
 import { useAuth } from "../stores/authStore";
 import { Logo } from "./Logo";
 import { Button } from "./ui/Button";
@@ -23,6 +23,13 @@ export function AppLayout() {
               className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-zinc-900/10"
             >
               <Building2 size={18} />
+            </Link>
+            <Link
+              to="/generator"
+              aria-label="Password generator"
+              className="rounded-md p-1.5 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-zinc-900/10"
+            >
+              <KeyRound size={18} />
             </Link>
             <Link
               to="/settings"

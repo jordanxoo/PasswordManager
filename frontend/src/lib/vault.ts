@@ -1,4 +1,11 @@
-import { encryptEntry, decryptEntry, type VaultEntry, type VaultInput } from "@pm/core";
+import {
+  encryptEntry,
+  decryptEntry,
+  generatePassword as generatePasswordCore,
+  type VaultEntry,
+  type VaultHistoryEntry,
+  type VaultInput,
+} from "@pm/core";
 
 /** The full entry content — everything here is encrypted before it leaves the
  *  device (full zero-knowledge: the server only ever sees ciphertext). */
@@ -45,6 +52,38 @@ export async function decodeEntry(entry: VaultEntry, key: CryptoKey): Promise<Va
   };
 }
 
+/** A decrypted past version of an entry, as shown in the history timeline. */
+export interface HistoryVersion {
+  id: string;
+  changedAt: string;
+  secret: VaultSecret;
+}
+
+/** Decrypt one history snapshot. Throws if the key is wrong. */
+export async function decodeHistory(
+  entry: VaultHistoryEntry,
+  key: CryptoKey,
+): Promise<HistoryVersion> {
+  const json = await decryptEntry({ encrypted: entry.encrypted, iv: entry.iv }, key);
+  const s = JSON.parse(json) as Partial<VaultSecret>;
+  return {
+    id: entry.id,
+    changedAt: entry.changed_at,
+    secret: {
+      name: s.name ?? "",
+      url: s.url ?? "",
+      username: s.username ?? "",
+      password: s.password ?? "",
+      notes: s.notes ?? "",
+    },
+  };
+}
+
+/** The secret fields that differ between two versions. */
+export function diffFields(a: VaultSecret, b: VaultSecret): (keyof VaultSecret)[] {
+  return (Object.keys(a) as (keyof VaultSecret)[]).filter((k) => a[k] !== b[k]);
+}
+
 /** Encrypt a draft into the API payload — name/url/username/password/notes all
  *  go into the ciphertext; only `encrypted`+`iv` leave the device. */
 export async function encodeDraft(draft: VaultDraft, key: CryptoKey): Promise<VaultInput> {
@@ -59,20 +98,11 @@ export async function encodeDraft(draft: VaultDraft, key: CryptoKey): Promise<Va
   return { encrypted, iv };
 }
 
-const ALPHABET =
-  "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_=+";
-
-/** Cryptographically-random password using a no-modulo-bias rejection sampler. */
+/** Quick all-classes password at the default settings — used for one-click
+ *  generation and mock data. The full, configurable generator lives in
+ *  `@pm/core` and is surfaced by the `<PasswordGenerator>` component. */
 export function generatePassword(length = 20): string {
-  const max = Math.floor(256 / ALPHABET.length) * ALPHABET.length;
-  let out = "";
-  while (out.length < length) {
-    const bytes = crypto.getRandomValues(new Uint8Array(length));
-    for (let i = 0; i < bytes.length && out.length < length; i++) {
-      if (bytes[i] < max) out += ALPHABET[bytes[i] % ALPHABET.length];
-    }
-  }
-  return out;
+  return generatePasswordCore({ length });
 }
 
 // --- dev only: realistic-ish mock entries for testing ---

@@ -1,5 +1,6 @@
 from pydantic import BaseModel,ConfigDict
 from datetime import datetime
+from app.schemas.types import UTCDateTime
 from uuid import UUID
 from typing import Optional
 from app.models.enums import Category
@@ -8,7 +9,7 @@ import base64
 class VaultCreate(BaseModel):
     encrypted: str = Field(max_length=100_000)
     iv: str = Field(max_length=512)
-    expires_at: Optional[datetime] = None
+    expires_at: Optional[UTCDateTime] = None
     category: Optional[Category] = None
     # When set, the entry is shared with this organization (encrypted with the
     # org key) instead of being personal.
@@ -33,7 +34,7 @@ class VaultCreate(BaseModel):
 class VaultUpdate(BaseModel):
     encrypted: str
     iv: str
-    expires_at: Optional[datetime] = None
+    expires_at: Optional[UTCDateTime] = None
     category: Optional[Category] = None
 
     @field_validator("iv")
@@ -56,9 +57,9 @@ class VaultResponse(BaseModel):
     encrypted: str
     iv: str
     id: UUID
-    created_at: datetime
-    updated_at: datetime
-    expires_at: Optional[datetime] = None
+    created_at: UTCDateTime
+    updated_at: UTCDateTime
+    expires_at: Optional[UTCDateTime] = None
     category: Optional[Category] = None
     pinned: bool = False
     org_id: Optional[UUID] = None
@@ -76,7 +77,7 @@ class VaultPaginatedResponse(BaseModel):
 class VaultExportResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     version: int = 1
-    exported_at: datetime
+    exported_at: UTCDateTime
     items: list[VaultResponse]
 
 class VaultImportRequest(BaseModel):
@@ -96,5 +97,5 @@ class VaultHistoryResponse(BaseModel):
     vault_id: UUID
     encrypted: str
     iv: str
-    changed_at:datetime
+    changed_at: UTCDateTime
     

@@ -2,7 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import { useVaultContext } from "../stores/vaultContext";
 import { useActiveVaultKey } from "./orgQueries";
-import { decodeEntry, encodeDraft, type VaultDraft, type VaultItem } from "./vault";
+import {
+  decodeEntry,
+  decodeHistory,
+  encodeDraft,
+  type HistoryVersion,
+  type VaultDraft,
+  type VaultItem,
+} from "./vault";
 
 /** Query key scoped to the active context: personal, an org's General, or a collection. */
 const vaultKey = (orgId: string | null, collectionId: string | null) =>
@@ -59,6 +66,35 @@ export function useTogglePin() {
   return useMutation({
     mutationFn: (item: VaultItem) => api.setPin(item.id, !item.pinned),
     onSuccess: () => qc.invalidateQueries({ queryKey: vaultKey(orgId, collectionId) }),
+  });
+}
+
+/** Fetch + decrypt an entry's prior versions (newest first). Uses the active
+ *  context key so it works for personal, "General" and collection entries. */
+export function useVaultHistory(id: string | null) {
+  const { key } = useActiveVaultKey();
+  return useQuery({
+    queryKey: ["vault", "history", id],
+    enabled: !!id && !!key,
+    queryFn: async (): Promise<HistoryVersion[]> => {
+      const entries = await api.vaultHistory(id!);
+      const decoded = await Promise.all(
+        entries.map((e) => decodeHistory(e, key!).catch(() => null)),
+      );
+      return decoded.filter((v): v is HistoryVersion => v !== null);
+    },
+  });
+}
+
+/** Roll an entry back to one of its snapshots, then refresh the vault list. */
+export function useRestoreVault(vaultId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (historyId: string) => api.restoreVault(vaultId!, historyId),
+    // Invalidate every vault context (prefix match) plus this entry's history.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["vault"] });
+    },
   });
 }
 

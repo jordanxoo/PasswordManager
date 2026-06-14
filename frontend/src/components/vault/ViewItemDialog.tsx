@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Copy, Eye, EyeOff } from "lucide-react";
+import { Clock, Copy, Eye, EyeOff } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { IconButton } from "../ui/IconButton";
@@ -13,11 +13,12 @@ interface Props {
   onClose: () => void;
   onEdit: (item: VaultItem) => void;
   onDelete: (item: VaultItem) => void;
+  onHistory: (item: VaultItem) => void;
   /** Hide Edit/Delete for read-only org members. */
   readOnly?: boolean;
 }
 
-export function ViewItemDialog({ item, onClose, onEdit, onDelete, readOnly }: Props) {
+export function ViewItemDialog({ item, onClose, onEdit, onDelete, onHistory, readOnly }: Props) {
   const [reveal, setReveal] = useState(false);
   useEffect(() => {
     setReveal(false);
@@ -67,8 +68,8 @@ export function ViewItemDialog({ item, onClose, onEdit, onDelete, readOnly }: Pr
             </div>
           )}
 
-          {!readOnly && (
-            <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between pt-2">
+            {!readOnly ? (
               <Button
                 variant="secondary"
                 className="border-red-200 text-red-600 hover:bg-red-50"
@@ -76,9 +77,17 @@ export function ViewItemDialog({ item, onClose, onEdit, onDelete, readOnly }: Pr
               >
                 Delete
               </Button>
-              <Button onClick={() => onEdit(item)}>Edit</Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" onClick={() => onHistory(item)}>
+                <Clock size={16} />
+                History
+              </Button>
+              {!readOnly && <Button onClick={() => onEdit(item)}>Edit</Button>}
             </div>
-          )}
+          </div>
         </div>
       )}
     </Modal>

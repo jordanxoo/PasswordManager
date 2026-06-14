@@ -6,6 +6,7 @@ import { AppLayout } from "./components/AppLayout";
 import { LoginPage } from "./routes/LoginPage";
 import { RegisterPage } from "./routes/RegisterPage";
 import { VaultPage } from "./routes/VaultPage";
+import { GeneratorPage } from "./routes/GeneratorPage";
 import { SettingsPage } from "./routes/SettingsPage";
 import { OrganizationsPage } from "./routes/OrganizationsPage";
 import { OrganizationDetailPage } from "./routes/OrganizationDetailPage";
@@ -24,6 +25,7 @@ export default function App() {
               <Route index element={<VaultPage />} />
               <Route path="organizations" element={<OrganizationsPage />} />
               <Route path="organizations/:orgId" element={<OrganizationDetailPage />} />
+              <Route path="generator" element={<GeneratorPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Route>

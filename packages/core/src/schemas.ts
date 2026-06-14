@@ -134,3 +134,12 @@ export const vaultPageSchema = z.object({
   has_next: z.boolean(),
 });
 export type VaultPage = z.infer<typeof vaultPageSchema>;
+
+export const vaultHistorySchema = z.object({
+  id: z.string(),
+  vault_id: z.string(),
+  encrypted: z.string(),
+  iv: z.string(),
+  changed_at: z.string(),
+});
+export type VaultHistoryEntry = z.infer<typeof vaultHistorySchema>;

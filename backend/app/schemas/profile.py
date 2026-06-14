@@ -1,5 +1,6 @@
 from pydantic import BaseModel,EmailStr
 from datetime import datetime
+from app.schemas.types import UTCDateTime
 from uuid import UUID
 from app.models.enums import Role,EventType
 from typing import Optional
@@ -7,7 +8,7 @@ from typing import Optional
 class ProfileResponse(BaseModel):
     model_config = {"from_attributes": True}
     email: str
-    created_at: datetime
+    created_at: UTCDateTime
     totp_enabled: bool
     role: Role
 
@@ -26,11 +27,11 @@ class DeleteAccountRequest(BaseModel):
 class SessionResponse(BaseModel):
     model_config = {"from_attributes": True}
     id: UUID
-    expires_at: datetime
+    expires_at: UTCDateTime
 
 class AuditLogResponse(BaseModel):
     model_config = {"from_attributes": True}
     event_type: EventType
     ip_address: Optional[str]
     user_agent: Optional[str]
-    created_at: datetime
+    created_at: UTCDateTime

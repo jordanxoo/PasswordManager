@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.schemas.types import UTCDateTime
 from typing import Optional
 from uuid import UUID
 
@@ -14,7 +15,7 @@ class AuditLogResponse(BaseModel):
     ip_address: Optional[str]
     user_agent: Optional[str]
     event_metadata: Optional[dict]
-    created_at: Optional[datetime]
+    created_at: Optional[UTCDateTime]
 
     model_config = {"from_attributes": True}
 
@@ -22,8 +23,8 @@ class AuditLogResponse(BaseModel):
 class AuditLogFilter(BaseModel):
     user_id: Optional[UUID] = None
     event_type: Optional[EventType] = None
-    date_from: Optional[datetime] = None
-    date_to: Optional[datetime] = None
+    date_from: Optional[UTCDateTime] = None
+    date_to: Optional[UTCDateTime] = None
     ip_address: Optional[str] = None
     limit: int = Field(default=50,ge=1,le=100)
     offset: int = Field(default=0,ge=0)
