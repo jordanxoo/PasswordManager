@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, KeyRound, MailPlus, Trash2 } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Crown, KeyRound, MailPlus, Trash2 } from "lucide-react";
 import { ApiError } from "@pm/core";
 import { useAuth } from "../stores/authStore";
 import {
@@ -15,6 +15,8 @@ import {
   useRevokeInvitation,
   useConfirmMember,
   useRotateOrgKey,
+  useTransferOwnership,
+  useDeleteOrg,
   orgMembersKey,
 } from "../lib/orgQueries";
 import { Button } from "../components/ui/Button";
@@ -31,6 +33,7 @@ const errMsg = (e: unknown, fallback: string) =>
 
 export function OrganizationDetailPage() {
   const { orgId = "" } = useParams();
+  const navigate = useNavigate();
   const email = useAuth((s) => s.email);
   const { data: orgs } = useOrgs();
   const org = orgs?.find((o) => o.id === orgId);
@@ -58,6 +61,8 @@ export function OrganizationDetailPage() {
   const revokeInvitation = useRevokeInvitation(orgId);
   const confirmMember = useConfirmMember(org);
   const rotateKey = useRotateOrgKey(org);
+  const transferOwnership = useTransferOwnership(orgId);
+  const deleteOrg = useDeleteOrg();
 
   const [open, setOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -92,6 +97,30 @@ export function OrganizationDetailPage() {
       await rotateKey.mutateAsync({});
     } catch (e) {
       setConfirmError(errMsg(e, "Could not rotate key"));
+    }
+  }
+
+  async function onTransfer(userId: string, memberEmail: string) {
+    setConfirmError("");
+    if (!window.confirm(
+      `Make ${memberEmail} the owner? You'll become an admin and lose owner control.`)) return;
+    try {
+      await transferOwnership.mutateAsync(userId);
+    } catch (e) {
+      setConfirmError(errMsg(e, "Could not transfer ownership"));
+    }
+  }
+
+  async function onDeleteOrg() {
+    setConfirmError("");
+    if (!window.confirm(
+      `Delete organization "${org?.name}"? All shared items are permanently destroyed. ` +
+      "This cannot be undone.")) return;
+    try {
+      await deleteOrg.mutateAsync(orgId);
+      navigate("/organizations", { replace: true });
+    } catch (e) {
+      setConfirmError(errMsg(e, "Could not delete organization"));
     }
   }
 
@@ -195,6 +224,17 @@ export function OrganizationDetailPage() {
                       Confirm
                     </Button>
                   )}
+                  {isOwner && m.confirmed && m.role !== "owner" && (
+                    <button
+                      aria-label="Make owner"
+                      title="Make owner"
+                      disabled={transferOwnership.isPending}
+                      onClick={() => void onTransfer(m.user_id, m.email)}
+                      className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-amber-50 hover:text-amber-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-500/10 disabled:opacity-50"
+                    >
+                      <Crown size={16} />
+                    </button>
+                  )}
                   {isOwner && m.role !== "owner" ? (
                     <select
                       value={m.role}
@@ -251,6 +291,26 @@ export function OrganizationDetailPage() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {isOwner && org && (
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50/40 p-4">
+          <div>
+            <p className="text-sm font-medium text-zinc-900">Delete organization</p>
+            <p className="mt-0.5 text-[13px] text-zinc-500">
+              Permanently removes the org and all its shared items. Can't be undone.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="border-red-200 text-red-600 hover:bg-red-50"
+            disabled={deleteOrg.isPending}
+            onClick={() => void onDeleteOrg()}
+          >
+            {deleteOrg.isPending ? "Deleting…" : "Delete"}
+          </Button>
         </div>
       )}
 

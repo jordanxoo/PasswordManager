@@ -93,6 +93,10 @@ class RotatedItem(BaseModel):
     iv: str = Field(min_length=16, max_length=16)
 
 
+class TransferOwnershipRequest(BaseModel):
+    user_id: UUID
+
+
 class RotateKeyRequest(BaseModel):
     # Optionally remove a member as part of the same atomic re-key.
     remove_user_id: UUID | None = None

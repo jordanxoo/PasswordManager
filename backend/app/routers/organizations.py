@@ -12,12 +12,14 @@ from app.schemas.organization import (
     MemberAddRequest, MemberResponse, RoleUpdateRequest, OrgSettingsRequest,
     InvitationCreate, InvitationResponse, InvitationLookupResponse,
     AcceptInviteRequest, ConfirmMemberRequest, RotateKeyRequest,
+    TransferOwnershipRequest,
 )
 from app.services.organization_service import (
     create_organization, list_user_organizations, list_members,
     add_member, remove_member, change_member_role, update_settings,
     create_invitation, list_invitations, revoke_invitation,
     lookup_invitation, accept_invitation, confirm_member, rotate_org_key,
+    transfer_ownership, delete_organization,
 )
 from app.services.audit_service import log_event
 from app.publishers.notification_publisher import publish_email
@@ -163,6 +165,35 @@ async def confirm_member_endpoint(
         user_id=user.id, email=user.email, role=updated.role,
         created_at=updated.created_at, confirmed=True,
     )
+
+
+@router.post("/{org_id}/transfer-ownership")
+async def transfer_ownership_endpoint(
+    request: Request,
+    org_id: UUID,
+    data: TransferOwnershipRequest,
+    db: AsyncSession = Depends(get_db),
+    membership = Depends(require_org_role(OrgRole.OWNER))):
+
+    result = await transfer_ownership(db, org_id, membership, data.user_id)
+    await log_event(db, EventType.ORG_ROLE_CHANGED, request.client.host,
+                    request.headers.get("user-agent"), str(membership.user_id),
+                    metadata={"org_id": str(org_id), "new_owner": str(data.user_id)})
+    return result
+
+
+@router.delete("/{org_id}")
+async def delete_organization_endpoint(
+    request: Request,
+    org_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    membership = Depends(require_org_role(OrgRole.OWNER))):
+
+    result = await delete_organization(db, org_id)
+    await log_event(db, EventType.ORG_MEMBER_REMOVED, request.client.host,
+                    request.headers.get("user-agent"), str(membership.user_id),
+                    metadata={"org_id": str(org_id), "deleted": True})
+    return result
 
 
 @router.post("/{org_id}/rotate-key")

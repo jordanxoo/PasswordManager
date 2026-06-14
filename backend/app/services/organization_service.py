@@ -301,6 +301,43 @@ async def rotate_org_key(db, org_id, remove_user_id, member_keys, vault_items, a
     return {"message": "rotated"}
 
 
+async def transfer_ownership(db, org_id, current_owner_membership, new_owner_user_id):
+    """Hand the organization to another confirmed member. Pure role swap — the
+    org key is unchanged, so no re-encryption is needed. Caller must be OWNER."""
+    if str(new_owner_user_id) == str(current_owner_membership.user_id):
+        raise HTTPException(status_code=400, detail="You already own this organization")
+
+    target = await get_membership(db, org_id, new_owner_user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    if target.wrapped_org_key is None:
+        raise HTTPException(status_code=400,
+                            detail="Member must be confirmed before becoming owner")
+
+    current_owner_membership.role = OrgRole.ADMIN
+    target.role = OrgRole.OWNER
+    org = (await db.execute(
+        select(Organization).where(Organization.id == org_id))).scalar_one()
+    org.owner_id = new_owner_user_id
+    await db.commit()
+    return {"message": "ownership transferred"}
+
+
+async def delete_organization(db, org_id):
+    """Delete an organization and everything it owns. Caller must be OWNER.
+    FKs lack ON DELETE CASCADE, so children go before parents (cf. delete_account)."""
+    org_vault_ids = select(Vault.id).where(Vault.org_id == org_id)
+    await db.execute(delete(VaultHistory).where(VaultHistory.vault_id.in_(org_vault_ids)))
+    await db.execute(delete(Vault).where(Vault.org_id == org_id))
+    await db.execute(delete(OrganizationMembership).where(
+        OrganizationMembership.org_id == org_id))
+    await db.execute(delete(OrganizationInvitation).where(
+        OrganizationInvitation.org_id == org_id))
+    await db.execute(delete(Organization).where(Organization.id == org_id))
+    await db.commit()
+    return {"message": "deleted"}
+
+
 async def change_member_role(db, org_id, target_user_id, new_role):
     """Change a member's role. Caller must be OWNER (enforced at the router).
 

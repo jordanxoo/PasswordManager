@@ -94,6 +94,25 @@ export function useRemoveMember(orgId: string) {
   });
 }
 
+export function useTransferOwnership(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => api.transferOwnership(orgId, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ORGS_KEY });
+      qc.invalidateQueries({ queryKey: membersKey(orgId) });
+    },
+  });
+}
+
+export function useDeleteOrg() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orgId: string) => api.deleteOrg(orgId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ORGS_KEY }),
+  });
+}
+
 export function useUpdateOrgSettings(orgId: string) {
   const qc = useQueryClient();
   return useMutation({

@@ -279,6 +279,19 @@ export function createApiClient(baseUrl: string) {
       );
     },
 
+    /** Hand the org to another confirmed member (owner only). */
+    transferOwnership(orgId: string, userId: string): Promise<{ message: string }> {
+      return request(`/organizations/${orgId}/transfer-ownership`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: userId }),
+      });
+    },
+
+    /** Delete an organization and all its shared data (owner only). */
+    deleteOrg(orgId: string): Promise<void> {
+      return request(`/organizations/${orgId}`, { method: "DELETE" });
+    },
+
     changeMemberRole(orgId: string, userId: string, role: string): Promise<OrgMember> {
       return request(
         `/organizations/${orgId}/members/${userId}`,

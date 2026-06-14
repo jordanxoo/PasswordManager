@@ -360,6 +360,72 @@ async def test_admin_cannot_remove_admin(e2e_client):
 
 
 @pytest.mark.asyncio
+async def test_transfer_ownership(e2e_client):
+    owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
+    b_h, _ = await _register_and_login(e2e_client, "b@test.com", "PUB_B")
+    org = (await e2e_client.post("/organizations/", headers=owner_h,
+           json={"name": "Acme", "wrapped_org_key": "WO"})).json()
+    org_id = org["id"]
+    await e2e_client.post(f"/organizations/{org_id}/members", headers=owner_h,
+                          json={"email": "b@test.com", "role": "member", "wrapped_org_key": "WB"})
+    members = (await e2e_client.get(f"/organizations/{org_id}/members", headers=owner_h)).json()
+    b_id = next(m["user_id"] for m in members if m["email"] == "b@test.com")
+
+    # A non-owner cannot transfer.
+    assert (await e2e_client.post(f"/organizations/{org_id}/transfer-ownership",
+            headers=b_h, json={"user_id": b_id})).status_code == 403
+
+    # Owner hands off to B: B becomes owner, old owner becomes admin.
+    t = await e2e_client.post(f"/organizations/{org_id}/transfer-ownership",
+                              headers=owner_h, json={"user_id": b_id})
+    assert t.status_code == 200
+    assert (await e2e_client.get("/organizations/", headers=b_h)).json()[0]["role"] == "owner"
+    assert (await e2e_client.get("/organizations/", headers=owner_h)).json()[0]["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_transfer_to_unconfirmed_fails(e2e_client, db):
+    owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
+    inv_h, _ = await _register_and_login(e2e_client, "pending@test.com", "PUB_P")
+    org = (await e2e_client.post("/organizations/", headers=owner_h,
+           json={"name": "Acme", "wrapped_org_key": "WO"})).json()
+    org_id = org["id"]
+    owner_id = await _user_id(db, "owner@test.com")
+    _, token = await create_invitation(db, org_id, "pending@test.com", OrgRole.MEMBER, owner_id)
+    await e2e_client.post("/organizations/invitations/accept", headers=inv_h, json={"token": token})
+    pid = await _user_id(db, "pending@test.com")
+    # Pending (unconfirmed) member can't be made owner.
+    r = await e2e_client.post(f"/organizations/{org_id}/transfer-ownership",
+                              headers=owner_h, json={"user_id": str(pid)})
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_delete_organization(e2e_client):
+    owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
+    b_h, _ = await _register_and_login(e2e_client, "b@test.com", "PUB_B")
+    org = (await e2e_client.post("/organizations/", headers=owner_h,
+           json={"name": "Acme", "wrapped_org_key": "WO"})).json()
+    org_id = org["id"]
+    await e2e_client.post(f"/organizations/{org_id}/members", headers=owner_h,
+                          json={"email": "b@test.com", "role": "member", "wrapped_org_key": "WB"})
+    await e2e_client.post("/vault/", headers=owner_h,
+        json={"encrypted": "X", "iv": "AAAAAAAAAAAAAAAA", "org_id": org_id})
+
+    # A non-owner cannot delete.
+    assert (await e2e_client.request("DELETE", f"/organizations/{org_id}",
+            headers=b_h)).status_code == 403
+
+    # Owner deletes -> the org disappears for everyone.
+    assert (await e2e_client.request("DELETE", f"/organizations/{org_id}",
+            headers=owner_h)).status_code == 200
+    assert (await e2e_client.get("/organizations/", headers=owner_h)).json() == []
+    assert (await e2e_client.get("/organizations/", headers=b_h)).json() == []
+    # The shared vault is gone too (membership check now fails -> 403).
+    assert (await e2e_client.get(f"/vault/?org_id={org_id}", headers=owner_h)).status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_add_member_without_keys_fails(e2e_client):
     owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
     # A user registered without a keypair (legacy) cannot be wrapped for.
