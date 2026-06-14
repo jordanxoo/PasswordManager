@@ -66,8 +66,26 @@ class OrganizationMembership(Base):
     role = Column(sa.Enum(OrgRole),nullable=False,default=OrgRole.MEMBER)
     # The org's AES key, wrapped (RSA-OAEP) with this member's public key.
     # Each member unwraps it with their own private key — server never sees it.
-    wrapped_org_key = Column(String,nullable=False)
+    # NULL while a member is "pending confirmation": they accepted an invite but
+    # an admin has not yet wrapped the org key for them.
+    wrapped_org_key = Column(String,nullable=True)
     created_at = Column(DateTime,default=datetime.now)
+
+
+class OrganizationInvitation(Base):
+    __tablename__ = "organization_invitations"
+
+    id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
+    org_id = Column(UUID(as_uuid=True),ForeignKey("organizations.id"),nullable=False)
+    email = Column(String,nullable=False)
+    role = Column(sa.Enum(OrgRole),nullable=False,default=OrgRole.MEMBER)
+    # sha256 of the random invite token; the token itself only ever lives in the
+    # emailed link, never in the database.
+    token_hash = Column(String,nullable=False,index=True)
+    status = Column(String,nullable=False,default="pending")  # pending|accepted|revoked
+    invited_by = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=False)
+    created_at = Column(DateTime,default=datetime.now)
+    expires_at = Column(DateTime,nullable=False)
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"

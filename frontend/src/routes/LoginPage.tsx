@@ -6,6 +6,7 @@ import { z } from "zod";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ApiError } from "@pm/core";
 import { useAuth } from "../stores/authStore";
+import { postAuthPath } from "../lib/pendingInvite";
 import { AuthShell } from "../components/AuthShell";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -36,7 +37,7 @@ export function LoginPage() {
     setFormError(null);
     try {
       const result = await login(email, password);
-      if (!result.requires2fa) navigate("/", { replace: true });
+      if (!result.requires2fa) navigate(postAuthPath(), { replace: true });
     } catch (e) {
       setFormError(e instanceof ApiError ? e.message : "Unable to sign in. Please try again.");
     }
@@ -48,7 +49,7 @@ export function LoginPage() {
         title="Two-factor authentication"
         subtitle="Enter the 6-digit code from your authenticator app."
       >
-        <TwoFactorForm onDone={() => navigate("/", { replace: true })} />
+        <TwoFactorForm onDone={() => navigate(postAuthPath(), { replace: true })} />
       </AuthShell>
     );
   }

@@ -10,6 +10,8 @@ import {
   organizationSchema,
   orgMemberSchema,
   publicKeySchema,
+  invitationSchema,
+  invitationLookupSchema,
   type LoginResponse,
   type Profile,
   type TwoFactorSetup,
@@ -20,6 +22,8 @@ import {
   type Organization,
   type OrgMember,
   type PublicKey,
+  type Invitation,
+  type InvitationLookup,
 } from "./schemas";
 import { z } from "zod";
 
@@ -287,6 +291,48 @@ export function createApiClient(baseUrl: string) {
         { method: "PATCH", body: JSON.stringify({ member_write: memberWrite }) },
         organizationSchema,
       );
+    },
+
+    /** Confirm a pending member by storing the org key wrapped for them (admin+). */
+    confirmMember(orgId: string, userId: string, wrappedOrgKey: string): Promise<OrgMember> {
+      return request(
+        `/organizations/${orgId}/members/${userId}/confirm`,
+        { method: "POST", body: JSON.stringify({ wrapped_org_key: wrappedOrgKey }) },
+        orgMemberSchema,
+      );
+    },
+
+    // --- invitations ---
+    createInvitation(orgId: string, email: string, role: string): Promise<Invitation> {
+      return request(
+        `/organizations/${orgId}/invitations`,
+        { method: "POST", body: JSON.stringify({ email, role }) },
+        invitationSchema,
+      );
+    },
+
+    listInvitations(orgId: string): Promise<Invitation[]> {
+      return request(`/organizations/${orgId}/invitations`, { method: "GET" },
+        z.array(invitationSchema));
+    },
+
+    revokeInvitation(orgId: string, inviteId: string): Promise<void> {
+      return request(`/organizations/${orgId}/invitations/${inviteId}`, { method: "DELETE" });
+    },
+
+    lookupInvitation(token: string): Promise<InvitationLookup> {
+      return request(
+        `/organizations/invitations/lookup?token=${encodeURIComponent(token)}`,
+        { method: "GET" },
+        invitationLookupSchema,
+      );
+    },
+
+    acceptInvitation(token: string): Promise<{ org_id: string }> {
+      return request("/organizations/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      });
     },
 
     // --- vault ---

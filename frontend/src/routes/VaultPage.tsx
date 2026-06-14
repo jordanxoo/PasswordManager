@@ -21,7 +21,7 @@ export function VaultPage() {
   const orgId = useVaultContext((s) => s.orgId);
   const setOrgId = useVaultContext((s) => s.setOrgId);
   const { data: orgs } = useOrgs();
-  const { canWrite } = useActiveVaultKey();
+  const { canWrite, pending } = useActiveVaultKey();
   const { data: items, isLoading, isError } = useVaultItems();
   const togglePin = useTogglePin();
   const createMany = useCreateManyVault();
@@ -114,7 +114,9 @@ export function VaultPage() {
       </div>
 
       <div className="mt-4">
-        {isLoading ? (
+        {pending ? (
+          <StateCard>Waiting for an admin to confirm your access to this organization.</StateCard>
+        ) : isLoading ? (
           <StateCard>Decrypting your vault…</StateCard>
         ) : isError ? (
           <StateCard>Couldn't load your vault. Try reloading.</StateCard>

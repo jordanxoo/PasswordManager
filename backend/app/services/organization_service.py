@@ -1,10 +1,21 @@
 from sqlalchemy import select
 from fastapi import HTTPException
 import logging
-from app.models.models import Organization, OrganizationMembership, User
+import secrets
+import hashlib
+from datetime import datetime, timedelta
+from app.models.models import (
+    Organization, OrganizationMembership, OrganizationInvitation, User,
+)
 from app.models.enums import OrgRole
 
 logger = logging.getLogger(__name__)
+
+INVITE_TTL = timedelta(days=7)
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 # Role hierarchy for permission checks: higher number => more privilege.
 ROLE_RANK = {OrgRole.MEMBER: 1, OrgRole.ADMIN: 2, OrgRole.OWNER: 3}
@@ -117,6 +128,113 @@ async def update_settings(db, org_id, member_write):
     await db.commit()
     await db.refresh(org)
     return org
+
+
+async def create_invitation(db, org_id, email, role, invited_by):
+    """Create a pending invitation and return (invitation, raw_token).
+
+    The raw token is only ever delivered in the emailed link; we store its hash."""
+    email = email.lower()
+    user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+    if user is not None and await get_membership(db, org_id, user.id) is not None:
+        raise HTTPException(status_code=400, detail="User is already a member")
+
+    token = secrets.token_urlsafe(32)
+    invitation = OrganizationInvitation(
+        org_id=org_id,
+        email=email,
+        role=role,
+        token_hash=_hash_token(token),
+        status="pending",
+        invited_by=invited_by,
+        expires_at=datetime.now() + INVITE_TTL,
+    )
+    db.add(invitation)
+    await db.commit()
+    await db.refresh(invitation)
+    return invitation, token
+
+
+async def list_invitations(db, org_id):
+    result = await db.execute(
+        select(OrganizationInvitation)
+        .where(OrganizationInvitation.org_id == org_id,
+               OrganizationInvitation.status == "pending")
+        .order_by(OrganizationInvitation.created_at.desc())
+    )
+    return result.scalars().all()
+
+
+async def revoke_invitation(db, org_id, invite_id):
+    invite = (await db.execute(
+        select(OrganizationInvitation).where(
+            OrganizationInvitation.id == invite_id,
+            OrganizationInvitation.org_id == org_id))).scalar_one_or_none()
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    invite.status = "revoked"
+    await db.commit()
+    return {"message": "revoked"}
+
+
+async def lookup_invitation(db, token):
+    invite = (await db.execute(
+        select(OrganizationInvitation).where(
+            OrganizationInvitation.token_hash == _hash_token(token)))).scalar_one_or_none()
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    org = (await db.execute(
+        select(Organization).where(Organization.id == invite.org_id))).scalar_one()
+    return {
+        "org_id": org.id,
+        "org_name": org.name,
+        "role": invite.role,
+        "email": invite.email,
+        "status": invite.status,
+        "expired": invite.expires_at < datetime.now(),
+    }
+
+
+async def accept_invitation(db, token, user_id, user_email):
+    invite = (await db.execute(
+        select(OrganizationInvitation).where(
+            OrganizationInvitation.token_hash == _hash_token(token)))).scalar_one_or_none()
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    if invite.status != "pending":
+        raise HTTPException(status_code=400, detail="Invitation is no longer valid")
+    if invite.expires_at < datetime.now():
+        raise HTTPException(status_code=400, detail="Invitation has expired")
+    if invite.email.lower() != user_email.lower():
+        raise HTTPException(status_code=403, detail="This invitation is for a different email")
+
+    if await get_membership(db, invite.org_id, user_id) is not None:
+        invite.status = "accepted"
+        await db.commit()
+        raise HTTPException(status_code=400, detail="You are already a member")
+
+    # Join as pending confirmation — no org key until an admin confirms.
+    membership = OrganizationMembership(
+        org_id=invite.org_id,
+        user_id=user_id,
+        role=invite.role,
+        wrapped_org_key=None,
+    )
+    db.add(membership)
+    invite.status = "accepted"
+    await db.commit()
+    return invite.org_id
+
+
+async def confirm_member(db, org_id, target_user_id, wrapped_org_key):
+    """Grant a pending member access by storing their wrapped org key."""
+    target = await get_membership(db, org_id, target_user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Member not found")
+    target.wrapped_org_key = wrapped_org_key
+    await db.commit()
+    await db.refresh(target)
+    return target
 
 
 async def change_member_role(db, org_id, target_user_id, new_role):

@@ -19,7 +19,8 @@ class OrganizationResponse(BaseModel):
     # unwrap it with their private key). Populated per-request, not from the
     # Organization row itself.
     role: OrgRole
-    wrapped_org_key: str
+    # Null while the current user is pending confirmation (no org key yet).
+    wrapped_org_key: str | None = None
     member_write: bool
 
 
@@ -41,10 +42,44 @@ class MemberResponse(BaseModel):
     email: str
     role: OrgRole
     created_at: datetime
+    # False while pending confirmation (admin hasn't wrapped the org key yet).
+    confirmed: bool = True
 
 
 class RoleUpdateRequest(BaseModel):
     role: OrgRole
+
+
+class InvitationCreate(BaseModel):
+    email: EmailStr
+    role: OrgRole = OrgRole.MEMBER
+
+
+class InvitationResponse(BaseModel):
+    model_config = {"from_attributes": True}
+    id: UUID
+    email: str
+    role: OrgRole
+    status: str
+    created_at: datetime
+    expires_at: datetime
+
+
+class InvitationLookupResponse(BaseModel):
+    org_id: UUID
+    org_name: str
+    role: OrgRole
+    email: str
+    status: str
+    expired: bool
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=128)
+
+
+class ConfirmMemberRequest(BaseModel):
+    wrapped_org_key: str = Field(min_length=1, max_length=8192)
 
 
 class PublicKeyResponse(BaseModel):

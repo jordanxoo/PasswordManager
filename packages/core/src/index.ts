@@ -31,6 +31,8 @@ export {
   organizationSchema,
   orgMemberSchema,
   publicKeySchema,
+  invitationSchema,
+  invitationLookupSchema,
 } from "./schemas";
 export type {
   LoginResponse,
@@ -43,4 +45,6 @@ export type {
   Organization,
   OrgMember,
   PublicKey,
+  Invitation,
+  InvitationLookup,
 } from "./schemas";

@@ -1,4 +1,12 @@
 import pytest
+from sqlalchemy import select
+from app.models.models import User, OrganizationInvitation
+from app.models.enums import OrgRole
+from app.services.organization_service import create_invitation
+
+
+async def _user_id(db, email):
+    return (await db.execute(select(User).where(User.email == email))).scalar_one().id
 
 
 async def _register_and_login(client, email, public_key):
@@ -182,6 +190,78 @@ async def test_member_write_policy_enforced(e2e_client):
     nope = await e2e_client.patch(f"/organizations/{org_id}/settings", headers=member_h,
         json={"member_write": True})
     assert nope.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_invite_accept_confirm_flow(e2e_client, db):
+    owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
+    invitee_h, _ = await _register_and_login(e2e_client, "invitee@test.com", "PUB_INV")
+    org = (await e2e_client.post("/organizations/", headers=owner_h,
+           json={"name": "Acme", "wrapped_org_key": "WRAP_OWNER"})).json()
+    org_id = org["id"]
+
+    owner_id = await _user_id(db, "owner@test.com")
+    _, token = await create_invitation(db, org_id, "invitee@test.com", OrgRole.MEMBER, owner_id)
+
+    # Wrong email cannot accept.
+    other_h, _ = await _register_and_login(e2e_client, "other@test.com", "PUB_OTH")
+    wrong = await e2e_client.post("/organizations/invitations/accept", headers=other_h,
+                                  json={"token": token})
+    assert wrong.status_code == 403
+
+    # Invitee accepts -> pending member (org visible but no org key yet).
+    acc = await e2e_client.post("/organizations/invitations/accept", headers=invitee_h,
+                                json={"token": token})
+    assert acc.status_code == 200 and acc.json()["org_id"] == org_id
+    orgs = (await e2e_client.get("/organizations/", headers=invitee_h)).json()
+    assert next(o for o in orgs if o["id"] == org_id)["wrapped_org_key"] is None
+
+    # Owner sees the member as unconfirmed.
+    members = (await e2e_client.get(f"/organizations/{org_id}/members", headers=owner_h)).json()
+    invitee = next(m for m in members if m["email"] == "invitee@test.com")
+    assert invitee["confirmed"] is False
+
+    # Owner confirms -> member receives their wrapped org key.
+    conf = await e2e_client.post(
+        f"/organizations/{org_id}/members/{invitee['user_id']}/confirm",
+        headers=owner_h, json={"wrapped_org_key": "WRAP_INV"})
+    assert conf.status_code == 200 and conf.json()["confirmed"] is True
+    orgs2 = (await e2e_client.get("/organizations/", headers=invitee_h)).json()
+    assert next(o for o in orgs2 if o["id"] == org_id)["wrapped_org_key"] == "WRAP_INV"
+
+
+@pytest.mark.asyncio
+async def test_invitation_rbac_and_revoke(e2e_client, db):
+    owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
+    member_h, _ = await _register_and_login(e2e_client, "member@test.com", "PUB_MEMBER")
+    org = (await e2e_client.post("/organizations/", headers=owner_h,
+           json={"name": "Acme", "wrapped_org_key": "WRAP_OWNER"})).json()
+    org_id = org["id"]
+    owner_id = await _user_id(db, "owner@test.com")
+    # Make member an actual (confirmed) member so they can act but lack admin.
+    _, mtoken = await create_invitation(db, org_id, "member@test.com", OrgRole.MEMBER, owner_id)
+    await e2e_client.post("/organizations/invitations/accept", headers=member_h,
+                          json={"token": mtoken})
+
+    # A plain member cannot create invitations.
+    denied = await e2e_client.post(f"/organizations/{org_id}/invitations", headers=member_h,
+                                   json={"email": "x@test.com", "role": "member"})
+    assert denied.status_code == 403
+
+    # Admin creates an invite via the API; it shows up in the list.
+    created = await e2e_client.post(f"/organizations/{org_id}/invitations", headers=owner_h,
+                                    json={"email": "newbie@test.com", "role": "member"})
+    assert created.status_code == 200
+    listed = (await e2e_client.get(f"/organizations/{org_id}/invitations", headers=owner_h)).json()
+    assert [i["email"] for i in listed] == ["newbie@test.com"]
+
+    # Revoke it -> a fresh service token for that email can't be accepted once revoked.
+    inv_id = listed[0]["id"]
+    rv = await e2e_client.request("DELETE",
+        f"/organizations/{org_id}/invitations/{inv_id}", headers=owner_h)
+    assert rv.status_code == 200
+    remaining = (await e2e_client.get(f"/organizations/{org_id}/invitations", headers=owner_h)).json()
+    assert remaining == []
 
 
 @pytest.mark.asyncio

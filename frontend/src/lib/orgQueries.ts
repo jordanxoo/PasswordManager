@@ -12,6 +12,7 @@ import { useVaultContext } from "../stores/vaultContext";
 
 const ORGS_KEY = ["organizations"] as const;
 const membersKey = (orgId: string) => ["organizations", orgId, "members"] as const;
+const invitesKey = (orgId: string) => ["organizations", orgId, "invitations"] as const;
 
 /** Organizations the current user belongs to (with role + wrapped org key). */
 export function useOrgs() {
@@ -54,7 +55,7 @@ export function useAddMember(org: Organization | undefined) {
   const privateKey = useAuth((s) => s.privateKey);
   return useMutation({
     mutationFn: async ({ email, role }: { email: string; role: string }) => {
-      if (!org) throw new Error("Organization not loaded yet — try again in a moment.");
+      if (!org?.wrapped_org_key) throw new Error("Organization not loaded yet — try again in a moment.");
       if (!privateKey) throw new Error("Session locked. Please sign in again.");
       // Unwrap our copy of the org key, then re-wrap it for the new member.
       const orgKey = await unwrapOrgKey(org.wrapped_org_key, privateKey);
@@ -92,6 +93,63 @@ export function useUpdateOrgSettings(orgId: string) {
   });
 }
 
+// --- invitations ---
+
+export function useInvitations(orgId: string, enabled = true) {
+  return useQuery({
+    queryKey: invitesKey(orgId),
+    enabled,
+    queryFn: () => api.listInvitations(orgId),
+  });
+}
+
+export function useCreateInvitation(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, role }: { email: string; role: string }) =>
+      api.createInvitation(orgId, email, role),
+    onSuccess: () => qc.invalidateQueries({ queryKey: invitesKey(orgId) }),
+  });
+}
+
+export function useRevokeInvitation(orgId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (inviteId: string) => api.revokeInvitation(orgId, inviteId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: invitesKey(orgId) }),
+  });
+}
+
+/** Accept an invitation: just registers membership (pending confirmation). */
+export function useAcceptInvitation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (token: string) => api.acceptInvitation(token),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ORGS_KEY }),
+  });
+}
+
+/**
+ * Confirm a pending member: unwrap our org key, re-wrap it with their public
+ * key, and store it. Same envelope re-wrap as adding a member.
+ */
+export function useConfirmMember(org: Organization | undefined) {
+  const qc = useQueryClient();
+  const privateKey = useAuth((s) => s.privateKey);
+  return useMutation({
+    mutationFn: async ({ userId, email }: { userId: string; email: string }) => {
+      if (!org?.wrapped_org_key) throw new Error("Organization not loaded yet — try again in a moment.");
+      if (!privateKey) throw new Error("Session locked. Please sign in again.");
+      const orgKey = await unwrapOrgKey(org.wrapped_org_key, privateKey);
+      const target = await api.getPublicKey(email);
+      const targetPub = await importPublicKey(target.public_key);
+      const wrapped = await wrapOrgKey(orgKey, targetPub);
+      return api.confirmMember(org.id, userId, wrapped);
+    },
+    onSuccess: () => org && qc.invalidateQueries({ queryKey: membersKey(org.id) }),
+  });
+}
+
 const ROLE_RANK: Record<string, number> = { member: 1, admin: 2, owner: 3 };
 
 /**
@@ -109,14 +167,17 @@ export function useActiveVaultKey() {
 
   const orgKeyQuery = useQuery({
     queryKey: ["orgKey", orgId],
-    enabled: !!org && !!privateKey,
+    enabled: !!org?.wrapped_org_key && !!privateKey,
     staleTime: Infinity,
-    queryFn: () => unwrapOrgKey(org!.wrapped_org_key, privateKey!),
+    queryFn: () => unwrapOrgKey(org!.wrapped_org_key!, privateKey!),
   });
 
   if (!orgId) {
-    return { key: encryptionKey ?? undefined, isLoading: false, canWrite: true };
+    return { key: encryptionKey ?? undefined, isLoading: false, canWrite: true, pending: false };
   }
-  const canWrite = !!org && (org.member_write || ROLE_RANK[org.role] >= ROLE_RANK.admin);
-  return { key: orgKeyQuery.data, isLoading: orgKeyQuery.isLoading, canWrite };
+  // Member accepted an invite but an admin hasn't granted the org key yet.
+  const pending = !!org && !org.wrapped_org_key;
+  const canWrite =
+    !pending && !!org && (org.member_write || ROLE_RANK[org.role] >= ROLE_RANK.admin);
+  return { key: orgKeyQuery.data, isLoading: orgKeyQuery.isLoading, canWrite, pending };
 }

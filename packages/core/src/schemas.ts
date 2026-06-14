@@ -18,7 +18,8 @@ export const organizationSchema = z.object({
   name: z.string(),
   created_at: z.string(),
   role: z.string(),
-  wrapped_org_key: z.string(),
+  // Null while the user is pending confirmation (no org key access yet).
+  wrapped_org_key: z.string().nullable().optional(),
   member_write: z.boolean(),
 });
 export type Organization = z.infer<typeof organizationSchema>;
@@ -28,8 +29,29 @@ export const orgMemberSchema = z.object({
   email: z.string(),
   role: z.string(),
   created_at: z.string(),
+  confirmed: z.boolean(),
 });
 export type OrgMember = z.infer<typeof orgMemberSchema>;
+
+export const invitationSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  role: z.string(),
+  status: z.string(),
+  created_at: z.string(),
+  expires_at: z.string(),
+});
+export type Invitation = z.infer<typeof invitationSchema>;
+
+export const invitationLookupSchema = z.object({
+  org_id: z.string(),
+  org_name: z.string(),
+  role: z.string(),
+  email: z.string(),
+  status: z.string(),
+  expired: z.boolean(),
+});
+export type InvitationLookup = z.infer<typeof invitationLookupSchema>;
 
 export const publicKeySchema = z.object({
   user_id: z.string(),

@@ -9,6 +9,7 @@ import { VaultPage } from "./routes/VaultPage";
 import { SettingsPage } from "./routes/SettingsPage";
 import { OrganizationsPage } from "./routes/OrganizationsPage";
 import { OrganizationDetailPage } from "./routes/OrganizationDetailPage";
+import { InviteAcceptPage } from "./routes/InviteAcceptPage";
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/invite" element={<InviteAcceptPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route index element={<VaultPage />} />

@@ -1,15 +1,18 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, MailPlus, Trash2 } from "lucide-react";
 import { ApiError } from "@pm/core";
 import { useAuth } from "../stores/authStore";
 import {
   useOrgs,
   useMembers,
-  useAddMember,
   useChangeRole,
   useRemoveMember,
   useUpdateOrgSettings,
+  useInvitations,
+  useCreateInvitation,
+  useRevokeInvitation,
+  useConfirmMember,
 } from "../lib/orgQueries";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -20,38 +23,52 @@ import { ErrorBanner } from "../components/ui/ErrorBanner";
 const ROLE_RANK: Record<string, number> = { member: 1, admin: 2, owner: 3 };
 const ROLE_LABEL: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 
+const errMsg = (e: unknown, fallback: string) =>
+  e instanceof ApiError || e instanceof Error ? e.message : fallback;
+
 export function OrganizationDetailPage() {
   const { orgId = "" } = useParams();
   const email = useAuth((s) => s.email);
   const { data: orgs } = useOrgs();
   const org = orgs?.find((o) => o.id === orgId);
 
+  const myRank = org ? ROLE_RANK[org.role] ?? 0 : 0;
+  const canManage = myRank >= ROLE_RANK.admin;
+  const isOwner = myRank >= ROLE_RANK.owner;
+
   const { data: members, isLoading } = useMembers(orgId);
-  const addMember = useAddMember(org);
+  const { data: invitations } = useInvitations(orgId, canManage);
   const changeRole = useChangeRole(orgId);
   const removeMember = useRemoveMember(orgId);
   const updateSettings = useUpdateOrgSettings(orgId);
+  const createInvitation = useCreateInvitation(orgId);
+  const revokeInvitation = useRevokeInvitation(orgId);
+  const confirmMember = useConfirmMember(org);
 
   const [open, setOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [error, setError] = useState("");
+  const [confirmError, setConfirmError] = useState("");
 
-  const myRank = org ? ROLE_RANK[org.role] ?? 0 : 0;
-  const canManage = myRank >= ROLE_RANK.admin;
-  const isOwner = myRank >= ROLE_RANK.owner;
-
-  async function onAdd() {
+  async function onInvite() {
     setError("");
     try {
-      await addMember.mutateAsync({ email: inviteEmail.trim(), role: inviteRole });
+      await createInvitation.mutateAsync({ email: inviteEmail.trim(), role: inviteRole });
       setInviteEmail("");
       setInviteRole("member");
       setOpen(false);
     } catch (e) {
-      setError(
-        e instanceof ApiError || e instanceof Error ? e.message : "Could not add member",
-      );
+      setError(errMsg(e, "Could not send invitation"));
+    }
+  }
+
+  async function onConfirm(userId: string, memberEmail: string) {
+    setConfirmError("");
+    try {
+      await confirmMember.mutateAsync({ userId, email: memberEmail });
+    } catch (e) {
+      setConfirmError(errMsg(e, "Could not confirm member"));
     }
   }
 
@@ -71,11 +88,11 @@ export function OrganizationDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900">{org?.name}</h1>
-          <p className="mt-1 text-sm text-zinc-500">Members & roles</p>
+          <p className="mt-1 text-sm text-zinc-500">Members &amp; roles</p>
         </div>
         {canManage && org && (
           <Button size="sm" onClick={() => setOpen(true)}>
-            <UserPlus size={16} /> Add member
+            <MailPlus size={16} /> Invite member
           </Button>
         )}
       </div>
@@ -100,6 +117,8 @@ export function OrganizationDetailPage() {
         </label>
       )}
 
+      {confirmError && <ErrorBanner message={confirmError} />}
+
       {isLoading ? (
         <p className="text-sm text-zinc-500">Loading…</p>
       ) : (
@@ -113,8 +132,20 @@ export function OrganizationDetailPage() {
                     {m.email}
                     {isSelf && <span className="ml-2 text-[12px] text-zinc-400">(you)</span>}
                   </p>
+                  {!m.confirmed && (
+                    <p className="text-[12px] text-amber-600">Pending confirmation</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {!m.confirmed && canManage && (
+                    <Button
+                      size="sm"
+                      disabled={confirmMember.isPending}
+                      onClick={() => void onConfirm(m.user_id, m.email)}
+                    >
+                      Confirm
+                    </Button>
+                  )}
                   {isOwner && m.role !== "owner" ? (
                     <select
                       value={m.role}
@@ -147,19 +178,40 @@ export function OrganizationDetailPage() {
         </ul>
       )}
 
+      {canManage && invitations && invitations.length > 0 && (
+        <div>
+          <h2 className="mb-2 text-sm font-medium text-zinc-700">Pending invitations</h2>
+          <ul className="divide-y divide-zinc-200 rounded-xl border border-zinc-200 bg-surface">
+            {invitations.map((inv) => (
+              <li key={inv.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-zinc-900">{inv.email}</p>
+                  <p className="text-[12px] text-zinc-400">
+                    Invited as {ROLE_LABEL[inv.role] ?? inv.role}
+                  </p>
+                </div>
+                <button
+                  aria-label="Revoke invitation"
+                  onClick={() => void revokeInvitation.mutate(inv.id)}
+                  className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-500/10"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <Modal
         open={open}
         onOpenChange={setOpen}
-        title="Add member"
-        description="The org key is re-encrypted in your browser with the new member's public key."
+        title="Invite member"
+        description="We email a join link. They get access once you confirm them after they accept."
       >
         <div className="space-y-4">
           {error && <ErrorBanner message={error} />}
-          <Field
-            label="Email"
-            htmlFor="invite-email"
-            hint="The person must already have an account."
-          >
+          <Field label="Email" htmlFor="invite-email" hint="An account isn't required yet.">
             <Input
               id="invite-email"
               type="email"
@@ -186,10 +238,10 @@ export function OrganizationDetailPage() {
             </Button>
             <Button
               size="sm"
-              disabled={!inviteEmail.trim() || addMember.isPending}
-              onClick={() => void onAdd()}
+              disabled={!inviteEmail.trim() || createInvitation.isPending}
+              onClick={() => void onInvite()}
             >
-              {addMember.isPending ? "Adding…" : "Add"}
+              {createInvitation.isPending ? "Sending…" : "Send invite"}
             </Button>
           </div>
         </div>
