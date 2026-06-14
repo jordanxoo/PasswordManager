@@ -14,9 +14,20 @@ import {
   useTogglePin,
   useVaultItems,
 } from "../lib/vaultQueries";
+import { useOrgs, useActiveVaultKey } from "../lib/orgQueries";
+import { useCollections } from "../lib/collectionQueries";
+import { useVaultContext } from "../stores/vaultContext";
+import { api } from "../lib/api";
 import { generateMockDrafts, type VaultItem } from "../lib/vault";
 
 export function VaultPage() {
+  const orgId = useVaultContext((s) => s.orgId);
+  const setOrgId = useVaultContext((s) => s.setOrgId);
+  const collectionId = useVaultContext((s) => s.collectionId);
+  const setCollectionId = useVaultContext((s) => s.setCollectionId);
+  const { data: orgs } = useOrgs();
+  const { data: collections } = useCollections(orgId);
+  const { canWrite, pending } = useActiveVaultKey();
   const { data: items, isLoading, isError } = useVaultItems();
   const togglePin = useTogglePin();
   const createMany = useCreateManyVault();
@@ -50,6 +61,11 @@ export function VaultPage() {
     setEditing(item);
     setDialogOpen(true);
   };
+  // Opening a shared entry is recorded in the org audit (best-effort).
+  const openView = (item: VaultItem) => {
+    setViewing(item);
+    if (orgId) void api.logItemView(item.id);
+  };
 
   // Resolve the open item against the live list so it reflects edits/restores.
   const viewingLive = viewing ? (items?.find((i) => i.id === viewing.id) ?? viewing) : null;
@@ -58,15 +74,47 @@ export function VaultPage() {
     <div>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Vault</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight text-zinc-900">Vault</h1>
+            <select
+              aria-label="Vault context"
+              value={orgId ?? ""}
+              onChange={(e) => setOrgId(e.target.value || null)}
+              className="h-8 rounded-md border border-zinc-200 bg-surface px-2 text-[13px] text-zinc-700"
+            >
+              <option value="">My vault</option>
+              {orgs?.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+            {orgId && (
+              <select
+                aria-label="Collection"
+                value={collectionId ?? ""}
+                onChange={(e) => setCollectionId(e.target.value || null)}
+                className="h-8 rounded-md border border-zinc-200 bg-surface px-2 text-[13px] text-zinc-700"
+              >
+                <option value="">General</option>
+                {collections?.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
           <p className="mt-1 text-sm text-zinc-500">
-            {items
-              ? `${items.length} ${items.length === 1 ? "item" : "items"}`
-              : "Your encrypted logins"}
+            {!canWrite
+              ? "Shared vault — read-only"
+              : items
+                ? `${items.length} ${items.length === 1 ? "item" : "items"}`
+                : "Your encrypted logins"}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {import.meta.env.DEV && (
+          {import.meta.env.DEV && canWrite && !orgId && (
             <Button
               variant="secondary"
               onClick={() => createMany.mutate(generateMockDrafts())}
@@ -76,10 +124,12 @@ export function VaultPage() {
               {createMany.isPending ? "Adding…" : "Mock data"}
             </Button>
           )}
-          <Button onClick={openCreate}>
-            <Plus size={16} />
-            New item
-          </Button>
+          {canWrite && (
+            <Button onClick={openCreate}>
+              <Plus size={16} />
+              New item
+            </Button>
+          )}
         </div>
       </div>
 
@@ -94,12 +144,18 @@ export function VaultPage() {
       </div>
 
       <div className="mt-4">
-        {isLoading ? (
+        {pending ? (
+          <StateCard>Waiting for an admin to confirm your access to this organization.</StateCard>
+        ) : isLoading ? (
           <StateCard>Decrypting your vault…</StateCard>
         ) : isError ? (
           <StateCard>Couldn't load your vault. Try reloading.</StateCard>
         ) : visible.length === 0 ? (
-          <EmptyState hasItems={!!items && items.length > 0} onCreate={openCreate} />
+          <EmptyState
+            hasItems={!!items && items.length > 0}
+            onCreate={openCreate}
+            canCreate={canWrite}
+          />
         ) : (
           <div className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-surface">
             <AnimatePresence initial={false}>
@@ -114,8 +170,9 @@ export function VaultPage() {
                 >
                   <VaultRow
                     item={item}
-                    onView={() => setViewing(item)}
+                    onView={() => openView(item)}
                     onTogglePin={() => togglePin.mutate(item)}
+                    readOnly={!canWrite}
                   />
                 </motion.div>
               ))}
@@ -137,6 +194,7 @@ export function VaultPage() {
           setViewing(null);
           setHistoryFor(it);
         }}
+        readOnly={!canWrite}
       />
       <VersionHistoryDialog
         item={historyFor}
@@ -151,8 +209,17 @@ export function VaultPage() {
   );
 }
 
-function EmptyState({ hasItems, onCreate }: { hasItems: boolean; onCreate: () => void }) {
+function EmptyState({
+  hasItems,
+  onCreate,
+  canCreate,
+}: {
+  hasItems: boolean;
+  onCreate: () => void;
+  canCreate: boolean;
+}) {
   if (hasItems) return <StateCard>No items match your search.</StateCard>;
+  if (!canCreate) return <StateCard>No shared items yet.</StateCard>;
   return (
     <div className="rounded-xl border border-dashed border-zinc-300 bg-surface py-16 text-center">
       <p className="text-sm font-medium text-zinc-900">No items yet</p>

@@ -34,6 +34,8 @@ async def test_create_vault_adds_and_commits(mock_db):
     data.iv = "iv123"
     data.expires_at = None
     data.category = None
+    data.org_id = None
+    data.collection_id = None
 
     await create_vault(mock_db,"user-123",data)
 
@@ -55,6 +57,7 @@ async def test_update_vault_not_found(mock_db):
 async def test_update_vault_forbidden(mock_db):
     mock_vault = MagicMock()
     mock_vault.user_id = "other-user"
+    mock_vault.org_id = None
 
     mock_db.execute.return_value.scalar_one_or_none.return_value = mock_vault
 
@@ -68,6 +71,7 @@ async def test_update_vault_forbidden(mock_db):
 async def test_update_vault_success(mock_db):
     mock_vault = MagicMock()
     mock_vault.user_id = "user-123"
+    mock_vault.org_id = None
     mock_db.execute.return_value.scalar_one_or_none.return_value = mock_vault
 
     data = MagicMock()
@@ -99,6 +103,7 @@ async def test_delete_vault_forbidden(mock_db):
 
     mock_vault = MagicMock()
     mock_vault.user_id = "other-user"
+    mock_vault.org_id = None
     mock_db.execute.return_value.scalar_one_or_none.return_value = mock_vault
 
     with pytest.raises(HTTPException) as exc:
@@ -109,10 +114,11 @@ async def test_delete_vault_forbidden(mock_db):
 async def test_delete_vault_success(mock_db):
     mock_vault = MagicMock()
     mock_vault.user_id = "user-123"
+    mock_vault.org_id = None
     mock_db.execute.return_value.scalar_one_or_none.return_value = mock_vault
 
     result = await delete_vault(mock_db,"user-123","vault-456")
 
     assert mock_vault.is_deleted == True
     mock_db.commit.assert_called_once()
-    assert result == {"message":"deleted"}
+    assert result is mock_vault

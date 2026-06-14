@@ -6,8 +6,16 @@ export {
   bytesToBase64,
   base64ToBytes,
   PBKDF2_ITERATIONS,
+  generateKeypair,
+  exportPublicKey,
+  importPublicKey,
+  wrapKeypair,
+  unwrapPrivateKey,
+  generateOrgKey,
+  wrapOrgKey,
+  unwrapOrgKey,
 } from "./crypto";
-export type { DerivedAccount, EncryptedPayload } from "./crypto";
+export type { DerivedAccount, EncryptedPayload, WrappedKeypair } from "./crypto";
 
 export { createApiClient, ApiError } from "./api";
 export type { ApiClient, VaultInput, LoginResult } from "./api";
@@ -32,6 +40,14 @@ export {
   vaultEntrySchema,
   vaultPageSchema,
   vaultHistorySchema,
+  organizationSchema,
+  orgMemberSchema,
+  publicKeySchema,
+  invitationSchema,
+  invitationLookupSchema,
+  collectionSchema,
+  collectionMemberSchema,
+  orgAuditEntrySchema,
 } from "./schemas";
 export type {
   LoginResponse,
@@ -42,4 +58,12 @@ export type {
   VaultEntry,
   VaultPage,
   VaultHistoryEntry,
+  Organization,
+  OrgMember,
+  PublicKey,
+  Invitation,
+  InvitationLookup,
+  Collection,
+  CollectionMember,
+  OrgAuditEntry,
 } from "./schemas";

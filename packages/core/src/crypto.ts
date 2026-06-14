@@ -121,3 +121,87 @@ export async function decryptEntry(payload: EncryptedPayload, key: CryptoKey): P
   );
   return decoder.decode(pt);
 }
+
+// --- Asymmetric layer for organization secret sharing ---
+//
+// Each user has an RSA-OAEP keypair. The PRIVATE key is wrapped (AES-GCM) with
+// the user's own `encryptionKey` and stored server-side as ciphertext; the
+// PUBLIC key is stored in plaintext. An organization has a random AES "org key"
+// which is wrapped to each member's public key. A member unwraps it with their
+// private key. The server only ever sees public keys and ciphertext.
+
+const RSA_PARAMS = {
+  name: "RSA-OAEP",
+  modulusLength: 2048,
+  publicExponent: new Uint8Array([1, 0, 1]),
+  hash: "SHA-256",
+} as const;
+
+export interface WrappedKeypair {
+  /** SPKI public key, base64. Stored in plaintext on the server. */
+  publicKey: string;
+  /** PKCS8 private key, AES-GCM-encrypted with the user's encryptionKey. */
+  encryptedPrivateKey: string;
+  /** Base64 IV for the private-key encryption. */
+  privateKeyIv: string;
+}
+
+/** Generate a fresh RSA-OAEP keypair (extractable so the private key can be wrapped). */
+export async function generateKeypair(): Promise<CryptoKeyPair> {
+  return subtle.generateKey(RSA_PARAMS, true, ["encrypt", "decrypt"]);
+}
+
+/** Export a public key to SPKI base64. */
+export async function exportPublicKey(publicKey: CryptoKey): Promise<string> {
+  return bytesToBase64(new Uint8Array(await subtle.exportKey("spki", publicKey)));
+}
+
+/** Import an SPKI base64 public key (encrypt-only). */
+export async function importPublicKey(spki: string): Promise<CryptoKey> {
+  return subtle.importKey("spki", base64ToBytes(spki), RSA_PARAMS, true, ["encrypt"]);
+}
+
+/** Wrap (encrypt) a generated keypair's private key with the user's AES encryptionKey. */
+export async function wrapKeypair(keypair: CryptoKeyPair, encryptionKey: CryptoKey): Promise<WrappedKeypair> {
+  const pkcs8 = new Uint8Array(await subtle.exportKey("pkcs8", keypair.privateKey));
+  const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const ct = await subtle.encrypt({ name: "AES-GCM", iv }, encryptionKey, pkcs8);
+  return {
+    publicKey: await exportPublicKey(keypair.publicKey),
+    encryptedPrivateKey: bytesToBase64(new Uint8Array(ct)),
+    privateKeyIv: bytesToBase64(iv),
+  };
+}
+
+/** Unwrap the private key: decrypt the PKCS8 blob with the user's AES key, then import it. */
+export async function unwrapPrivateKey(
+  encryptedPrivateKey: string,
+  privateKeyIv: string,
+  encryptionKey: CryptoKey,
+): Promise<CryptoKey> {
+  const pkcs8 = await subtle.decrypt(
+    { name: "AES-GCM", iv: base64ToBytes(privateKeyIv) },
+    encryptionKey,
+    base64ToBytes(encryptedPrivateKey),
+  );
+  return subtle.importKey("pkcs8", pkcs8, RSA_PARAMS, false, ["decrypt"]);
+}
+
+/** Generate a random AES-256 org key. Extractable so it can be wrapped per member. */
+export async function generateOrgKey(): Promise<CryptoKey> {
+  return subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+}
+
+/** Wrap an org key with a recipient's RSA public key. Returns base64 ciphertext. */
+export async function wrapOrgKey(orgKey: CryptoKey, recipientPublicKey: CryptoKey): Promise<string> {
+  const raw = new Uint8Array(await subtle.exportKey("raw", orgKey));
+  const ct = await subtle.encrypt({ name: "RSA-OAEP" }, recipientPublicKey, raw);
+  return bytesToBase64(new Uint8Array(ct));
+}
+
+/** Unwrap an org key with the member's RSA private key.
+ *  Imported as extractable so the holder can re-wrap it when adding new members. */
+export async function unwrapOrgKey(wrapped: string, privateKey: CryptoKey): Promise<CryptoKey> {
+  const raw = await subtle.decrypt({ name: "RSA-OAEP" }, privateKey, base64ToBytes(wrapped));
+  return subtle.importKey("raw", raw, { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+}

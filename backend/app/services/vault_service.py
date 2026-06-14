@@ -8,13 +8,81 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import select,or_,and_,func
 import base64
 import json
-from app.models.models import Vault,VaultHistory
+from app.models.models import Vault,VaultHistory,Organization,Collection
+from app.models.enums import OrgRole
+from app.services.organization_service import get_membership, ROLE_RANK
+from app.services.collection_service import get_collection_access
 from sqlalchemy import select,or_,and_,func,delete
 from uuid import UUID
 
-async def get_vaults(db, user_id, category=None, cursor=None, limit=20):
-    query = select(Vault).where(Vault.user_id == user_id,Vault.is_deleted == False)
-    
+
+async def _require_member(db, org_id, user_id, *, write):
+    """Ensure the user belongs to the org; for writes also enforce the org's
+    member_write policy (members are read-only when it is off)."""
+    membership = await get_membership(db, org_id, user_id)
+    if membership is None:
+        raise HTTPException(status_code=403, detail="Not a member of this organization")
+    if write:
+        org = (await db.execute(
+            select(Organization).where(Organization.id == org_id))).scalar_one_or_none()
+        if org is None:
+            raise HTTPException(status_code=404, detail="Organization not found")
+        if not (org.member_write or ROLE_RANK[membership.role] >= ROLE_RANK[OrgRole.ADMIN]):
+            raise HTTPException(status_code=403,
+                                detail="Read-only: members cannot edit shared entries")
+    return membership
+
+
+async def _require_collection_access(db, collection_id, user_id, *, write):
+    """Require the user has access to the collection; for writes also enforce the
+    owning org's member_write policy (same rule as org-wide shared entries)."""
+    if await get_collection_access(db, collection_id, user_id) is None:
+        raise HTTPException(status_code=403, detail="No access to this collection")
+    if write:
+        coll = (await db.execute(
+            select(Collection).where(Collection.id == collection_id))).scalar_one_or_none()
+        if coll is None:
+            raise HTTPException(status_code=404, detail="Collection not found")
+        await _require_member(db, coll.org_id, user_id, write=True)
+
+
+async def _authorize_vault(db, vault, user_id, *, write):
+    """Authorize a single vault row: personal by ownership, org-wide 'General' by
+    membership, collection entries by collection access (all with write policy)."""
+    if vault.org_id is None:
+        if str(vault.user_id) != user_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+    elif vault.collection_id is None:
+        await _require_member(db, vault.org_id, user_id, write=write)
+    else:
+        await _require_collection_access(db, vault.collection_id, user_id, write=write)
+
+
+async def get_vault_authorized(db, user_id, vault_id, *, write=False):
+    """Load a vault row and authorize the caller for it (used by the view-log endpoint)."""
+    vault = (await db.execute(select(Vault).where(Vault.id == vault_id))).scalar_one_or_none()
+    if vault is None:
+        raise HTTPException(status_code=404, detail="Not Found")
+    await _authorize_vault(db, vault, user_id, write=write)
+    return vault
+
+
+async def get_vaults(db, user_id, category=None, cursor=None, limit=20, org_id=None,
+                     collection_id=None):
+    if collection_id is not None:
+        await _require_collection_access(db, collection_id, user_id, write=False)
+        query = select(Vault).where(Vault.collection_id == collection_id,
+                                    Vault.is_deleted == False)
+    elif org_id is not None:
+        # Org-wide "General" — org entries not in any collection.
+        await _require_member(db, org_id, user_id, write=False)
+        query = select(Vault).where(Vault.org_id == org_id, Vault.collection_id.is_(None),
+                                    Vault.is_deleted == False)
+    else:
+        # Personal vault only — exclude org-shared entries this user authored.
+        query = select(Vault).where(Vault.user_id == user_id,
+                                    Vault.org_id.is_(None), Vault.is_deleted == False)
+
     if category:
         query = query.where(Vault.category == category)
 
@@ -50,14 +118,27 @@ async def get_vaults(db, user_id, category=None, cursor=None, limit=20):
 
 async def create_vault(db,user_id,data):
 
+    org_id = getattr(data, "org_id", None)
+    collection_id = getattr(data, "collection_id", None)
+    if collection_id is not None:
+        await _require_collection_access(db, collection_id, user_id, write=True)
+        # Derive org_id from the collection so it can't be spoofed.
+        coll = (await db.execute(
+            select(Collection).where(Collection.id == collection_id))).scalar_one()
+        org_id = coll.org_id
+    elif org_id is not None:
+        await _require_member(db, org_id, user_id, write=True)
+
     vault = Vault(
         user_id = user_id,
+        org_id = org_id,
+        collection_id = collection_id,
         encrypted = data.encrypted,
         iv = data.iv,
         expires_at = data.expires_at,
         category = data.category
     )
-    count = await get_vault_count(db,user_id)
+    count = await get_vault_count(db,user_id,org_id,collection_id)
     if count >= 1000:
         raise HTTPException(status_code=400, detail="Vault limit reached (max 1000 entries)")
 
@@ -75,9 +156,7 @@ async def update_vault(db, user_id, vault_id, data):
         logger.error("Vault not found with provided ID")
         raise HTTPException(status_code=404, detail="Not Found")
 
-    if str(vault.user_id) != user_id:
-        logger.error("Vault user id doesnt match provided user_id")
-        raise HTTPException(status_code=403, detail="Forbidden")
+    await _authorize_vault(db, vault, user_id, write=True)
 
     history = VaultHistory(
         vault_id=vault.id,
@@ -104,8 +183,9 @@ async def set_pin(db, user_id, vault_id, pinned):
     result = await db.execute(select(Vault).where(Vault.id == vault_id))
     vault = result.scalar_one_or_none()
 
-    if vault is None or str(vault.user_id) != user_id:
+    if vault is None:
         raise HTTPException(status_code=404, detail="Not Found")
+    await _authorize_vault(db, vault, user_id, write=True)
 
     vault.pinned = pinned
     await db.commit()
@@ -121,15 +201,14 @@ async def delete_vault(db,user_id,vault_id):
     if vault is None:
         logger.error("Vault not found")
         raise HTTPException(status_code=404,detail="Not Found")
-    
-    if str(vault.user_id) != user_id:
-        logger.error("Vault user id doesnt match provided user id")
-        raise HTTPException(status_code=403,detail="Forbidden")
-    
+
+    await _authorize_vault(db, vault, user_id, write=True)
+
     vault.is_deleted = True
     await db.commit()
     vault_operations_total.labels("delete").inc()
-    return {"message":"deleted"}
+    # Return the row so the router can stamp the audit log (org_id/collection_id).
+    return vault
 
 async def export_vaults(db,user_id):
     result = await db.execute(
@@ -164,10 +243,15 @@ async def import_vaults(db,user_id,entries):
     vault_operations_total.labels("create").inc()
     return len(vaults)
 
-async def get_vault_count(db, user_id):
-    result = await db.execute(
-        select(func.count()).select_from(Vault).where(Vault.user_id == user_id)
-    )
+async def get_vault_count(db, user_id, org_id=None, collection_id=None):
+    query = select(func.count()).select_from(Vault)
+    if collection_id is not None:
+        query = query.where(Vault.collection_id == collection_id)
+    elif org_id is not None:
+        query = query.where(Vault.org_id == org_id, Vault.collection_id.is_(None))
+    else:
+        query = query.where(Vault.user_id == user_id, Vault.org_id.is_(None))
+    result = await db.execute(query)
     return result.scalar()
 
 
@@ -176,9 +260,10 @@ async def  get_vault_history(db,user_id,vault_id):
     result = await db.execute(select(Vault).where(Vault.id == vault_id))
     vault = result.scalar_one_or_none()
 
-    if vault is None or str(vault.user_id) != user_id:
+    if vault is None:
         raise HTTPException(status_code=404,detail="Not found")
-    
+    await _authorize_vault(db, vault, user_id, write=False)
+
     history = await db.execute(
         select(VaultHistory).where(VaultHistory.vault_id == vault_id)
         .order_by(VaultHistory.changed_at.desc())
@@ -191,9 +276,10 @@ async def restore_vault(db,user_id,vault_id,history_id):
     result = await db.execute(select(Vault).where(Vault.id == vault_id))
     vault = result.scalar_one_or_none()
 
-    if vault is None or str(vault.user_id) != user_id:
+    if vault is None:
         raise HTTPException(status_code=404,detail="not found")
-    
+    await _authorize_vault(db, vault, user_id, write=True)
+
     history_result = await db.execute(
         select(VaultHistory).where(VaultHistory.id == history_id,
                                    VaultHistory.vault_id == vault_id)

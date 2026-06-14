@@ -8,6 +8,9 @@ import { RegisterPage } from "./routes/RegisterPage";
 import { VaultPage } from "./routes/VaultPage";
 import { GeneratorPage } from "./routes/GeneratorPage";
 import { SettingsPage } from "./routes/SettingsPage";
+import { OrganizationsPage } from "./routes/OrganizationsPage";
+import { OrganizationDetailPage } from "./routes/OrganizationDetailPage";
+import { InviteAcceptPage } from "./routes/InviteAcceptPage";
 
 export default function App() {
   return (
@@ -16,9 +19,12 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/invite" element={<InviteAcceptPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route index element={<VaultPage />} />
+              <Route path="organizations" element={<OrganizationsPage />} />
+              <Route path="organizations/:orgId" element={<OrganizationDetailPage />} />
               <Route path="generator" element={<GeneratorPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>

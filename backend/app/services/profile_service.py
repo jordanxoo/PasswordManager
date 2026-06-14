@@ -102,3 +102,26 @@ async def get_audit_log(db: AsyncSession, user_id: str):
         .limit(50)
     )
     return result.scalars().all()
+
+
+async def set_keys(db: AsyncSession, user_id: str, public_key: str,
+                   encrypted_private_key: str, private_key_iv: str):
+    """Backfill the asymmetric keypair (legacy account migration). Refuses to
+    overwrite an existing keypair — that would orphan any org keys wrapped to it."""
+    user = await _get_user(db, user_id)
+    if user.public_key is not None:
+        raise HTTPException(status_code=400, detail="Keys already set")
+    user.public_key = public_key
+    user.encrypted_private_key = encrypted_private_key
+    user.private_key_iv = private_key_iv
+    await db.commit()
+
+
+async def get_public_key(db: AsyncSession, email: str):
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.public_key is None:
+        raise HTTPException(status_code=400, detail="User has not set up encryption keys yet")
+    return {"user_id": user.id, "email": user.email, "public_key": user.public_key}

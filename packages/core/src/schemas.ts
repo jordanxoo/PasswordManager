@@ -1,12 +1,88 @@
 import { z } from "zod";
 
-/** Successful login / 2FA validation: access token (memory) + the account salt. */
+/** Successful login / 2FA validation: access token (memory) + the account salt.
+ *  The wrapped keypair is null for legacy accounts that predate key support. */
 export const loginResponseSchema = z.object({
   access_token: z.string(),
   token_type: z.string(),
   salt: z.string(),
+  public_key: z.string().nullable().optional(),
+  encrypted_private_key: z.string().nullable().optional(),
+  private_key_iv: z.string().nullable().optional(),
 });
 export type LoginResponse = z.infer<typeof loginResponseSchema>;
+
+/** An organization the current user belongs to, with their role + wrapped org key. */
+export const organizationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  created_at: z.string(),
+  role: z.string(),
+  // Null while the user is pending confirmation (no org key access yet).
+  wrapped_org_key: z.string().nullable().optional(),
+  member_write: z.boolean(),
+});
+export type Organization = z.infer<typeof organizationSchema>;
+
+export const orgMemberSchema = z.object({
+  user_id: z.string(),
+  email: z.string(),
+  role: z.string(),
+  created_at: z.string(),
+  confirmed: z.boolean(),
+});
+export type OrgMember = z.infer<typeof orgMemberSchema>;
+
+export const invitationSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  role: z.string(),
+  status: z.string(),
+  created_at: z.string(),
+  expires_at: z.string(),
+});
+export type Invitation = z.infer<typeof invitationSchema>;
+
+export const collectionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  created_at: z.string(),
+  wrapped_collection_key: z.string(),
+});
+export type Collection = z.infer<typeof collectionSchema>;
+
+export const collectionMemberSchema = z.object({
+  user_id: z.string(),
+  email: z.string(),
+  created_at: z.string(),
+});
+export type CollectionMember = z.infer<typeof collectionMemberSchema>;
+
+export const orgAuditEntrySchema = z.object({
+  id: z.string(),
+  actor_email: z.string().nullable().optional(),
+  event_type: z.string(),
+  event_metadata: z.record(z.unknown()).nullable().optional(),
+  created_at: z.string().nullable().optional(),
+});
+export type OrgAuditEntry = z.infer<typeof orgAuditEntrySchema>;
+
+export const invitationLookupSchema = z.object({
+  org_id: z.string(),
+  org_name: z.string(),
+  role: z.string(),
+  email: z.string(),
+  status: z.string(),
+  expired: z.boolean(),
+});
+export type InvitationLookup = z.infer<typeof invitationLookupSchema>;
+
+export const publicKeySchema = z.object({
+  user_id: z.string(),
+  email: z.string(),
+  public_key: z.string(),
+});
+export type PublicKey = z.infer<typeof publicKeySchema>;
 
 export const profileSchema = z.object({
   email: z.string(),
@@ -47,6 +123,8 @@ export const vaultEntrySchema = z.object({
   expires_at: z.string().nullable().optional(),
   category: z.string().nullable().optional(),
   pinned: z.boolean(),
+  org_id: z.string().nullable().optional(),
+  collection_id: z.string().nullable().optional(),
 });
 export type VaultEntry = z.infer<typeof vaultEntrySchema>;
 

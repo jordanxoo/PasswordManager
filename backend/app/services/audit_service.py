@@ -15,15 +15,17 @@ async def log_event(db
                     ,ip_address
                     ,user_agent
                     ,user_id = None
-                      ,metadata = None):
-    
+                      ,metadata = None
+                      ,org_id = None):
+
     audit_log = AuditLog(
         user_id = user_id,
+        org_id = org_id,
         ip_address = ip_address,
         user_agent = user_agent,
         event_type = event_type,
         event_metadata = metadata
-    ) 
+    )
 
     try:
         db.add(audit_log)
@@ -41,6 +43,33 @@ async def log_event(db
 
 
     
+_VAULT_EVENTS = [EventType.VAULT_READ, EventType.VAULT_CREATE,
+                 EventType.VAULT_UPDATE, EventType.VAULT_DELETE]
+
+
+async def get_org_audit(db, org_id, limit=50, offset=0, collection_id=None):
+    """Audit feed for one organization: who did what, newest first.
+    `collection_id` filters: a UUID -> that collection's events; "general" ->
+    org-wide shared-item events (no collection); None -> everything."""
+    from app.models.models import User
+    query = (
+        select(AuditLog, User.email)
+        .join(User, User.id == AuditLog.user_id, isouter=True)
+        .where(AuditLog.org_id == org_id)
+    )
+    # event_metadata is a generic JSON column, so reach into it with the raw
+    # Postgres ->> operator (text extraction) rather than JSONB's .astext.
+    coll_text = AuditLog.event_metadata.op("->>")("collection_id")
+    if collection_id == "general":
+        query = query.where(coll_text.is_(None), AuditLog.event_type.in_(_VAULT_EVENTS))
+    elif collection_id:
+        query = query.where(coll_text == str(collection_id))
+
+    result = await db.execute(
+        query.order_by(AuditLog.created_at.desc()).limit(limit).offset(offset))
+    return result.all()
+
+
 async def get_audit_logs(db,filters: AuditLogFilter):
 
     query = select(AuditLog)

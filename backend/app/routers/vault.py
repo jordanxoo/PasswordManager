@@ -1,7 +1,7 @@
 from fastapi import APIRouter,Depends,Request
 from app.database import get_db
 from app.dependencies import get_current_user, require_read,require_write
-from app.services.vault_service import get_vaults,create_vault,delete_vault,update_vault,export_vaults,import_vaults,get_vault_history,restore_vault,set_pin
+from app.services.vault_service import get_vaults,create_vault,delete_vault,update_vault,export_vaults,import_vaults,get_vault_history,restore_vault,set_pin,get_vault_authorized
 from sqlalchemy.ext.asyncio import  AsyncSession
 from uuid import UUID
 from app.services.audit_service import log_event,EventType
@@ -12,6 +12,14 @@ from app.schemas.vault import VaultCreate,VaultResponse,VaultPaginatedResponse,V
 from datetime import datetime
 router = APIRouter()
 
+
+def _item_meta(vault):
+    """Audit metadata for a shared entry — ids only (names stay encrypted)."""
+    return {
+        "vault_id": str(vault.id),
+        "collection_id": str(vault.collection_id) if vault.collection_id else None,
+    }
+
 @router.get("/", response_model=VaultPaginatedResponse)
 async def get_vaults_endpoint(
     request: Request,
@@ -19,9 +27,12 @@ async def get_vaults_endpoint(
     user_id: str = Depends(require_read),
     category: Optional[Category] = None,
     cursor: Optional[str] = None,
-    limit: int = 20):
+    limit: int = 20,
+    org_id: Optional[UUID] = None,
+    collection_id: Optional[UUID] = None):
 
-    items, next_cursor, has_next = await get_vaults(db, user_id, category, cursor, limit)
+    items, next_cursor, has_next = await get_vaults(db, user_id, category, cursor, limit,
+                                                    org_id, collection_id)
     await publish_vault_event("read", user_id)
     await log_event(db, EventType.VAULT_READ, request.client.host,
                     request.headers.get("user-agent"), user_id)
@@ -38,7 +49,8 @@ async def create_vault_endpoint(
     result = await create_vault(db,user_id,data)
     await publish_vault_event("create",user_id,str(result.id))
     await log_event(db,EventType.VAULT_CREATE,request.client.host,
-                    request.headers.get("user-agent"),user_id)
+                    request.headers.get("user-agent"),user_id,
+                    metadata=_item_meta(result), org_id=result.org_id)
 
     return result
 
@@ -99,11 +111,11 @@ async def update_vault_endpoint(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require_write)):
 
-    result =  await update_vault(db,user_id,vault_id,data)    
+    result =  await update_vault(db,user_id,vault_id,data)
     await publish_vault_event("update",user_id,str(vault_id))
     await log_event(db,EventType.VAULT_UPDATE,request.client.host,
-                    request.headers.get("user-agent"),user_id,metadata={"vault_id":str(vault_id)}
-    )
+                    request.headers.get("user-agent"),user_id,
+                    metadata=_item_meta(result), org_id=result.org_id)
     return result
 
 @router.patch("/{vault_id}/pin", response_model=VaultResponse)
@@ -123,12 +135,29 @@ async def delete_vault_endpoint(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(require_write)):
 
-    result =  await delete_vault(db,user_id,vault_id)   
+    vault = await delete_vault(db,user_id,vault_id)
     await publish_vault_event("delete",user_id,str(vault_id))
     await log_event(db,EventType.VAULT_DELETE,request.client.host,
-                    request.headers.get("user-agent"),user_id,metadata={"vault_id": str(vault_id)})
-    
-    return result
+                    request.headers.get("user-agent"),user_id,
+                    metadata=_item_meta(vault), org_id=vault.org_id)
+
+    return {"message":"deleted"}
+
+
+@router.post("/{vault_id}/view")
+async def log_view_endpoint(
+    request: Request,
+    vault_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(require_read)):
+    """Record that a user opened a specific shared entry (org audit). No-op for
+    personal entries — they aren't audited at the organization level."""
+    vault = await get_vault_authorized(db, user_id, vault_id, write=False)
+    if vault.org_id is not None:
+        await log_event(db, EventType.VAULT_READ, request.client.host,
+                        request.headers.get("user-agent"), user_id,
+                        metadata=_item_meta(vault), org_id=vault.org_id)
+    return {"ok": True}
 
 
 

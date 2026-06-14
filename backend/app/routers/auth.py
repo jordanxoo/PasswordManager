@@ -36,7 +36,8 @@ async def register(data: RegisterRequest,
                    request: Request,
                    db: AsyncSession = Depends(get_db)):
 
-    await register_user(db,data.email,data.password,data.salt)
+    await register_user(db,data.email,data.password,data.salt,
+                        data.public_key,data.encrypted_private_key,data.private_key_iv)
     await log_event(db,EventType.REGISTER,request.client.host,
                     request.headers.get("user-agent"))
     
@@ -87,7 +88,10 @@ async def login(data: LoginRequest,
     return LoginResponse(
         access_token=result["access_token"],
         token_type="bearer",
-        salt=result["salt"]
+        salt=result["salt"],
+        public_key=result.get("public_key"),
+        encrypted_private_key=result.get("encrypted_private_key"),
+        private_key_iv=result.get("private_key_iv")
     )
 
 
@@ -194,7 +198,10 @@ async def validate_2fa_endpoint(
     await check_and_publish_suspicious_login(redis, result["email"],
                                             request.client.host, result["user_id"])
     return LoginResponse(access_token=result["access_token"], token_type="bearer",
-                        salt=result["salt"])
+                        salt=result["salt"],
+                        public_key=result.get("public_key"),
+                        encrypted_private_key=result.get("encrypted_private_key"),
+                        private_key_iv=result.get("private_key_iv"))
 
 @router.post("/2fa/recovery/generate", response_model=RecoveryCodesResponse)
 async def generate_recovery_codes_endpoint(
@@ -283,7 +290,10 @@ async def validate_recovery_endpoint(
     return LoginResponse(
         access_token=jwt_token,
         token_type="bearer",
-        salt=user.salt
+        salt=user.salt,
+        public_key=user.public_key,
+        encrypted_private_key=user.encrypted_private_key,
+        private_key_iv=user.private_key_iv
     )
 
 

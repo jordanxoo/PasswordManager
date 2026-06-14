@@ -8,6 +8,14 @@ import {
   vaultEntrySchema,
   vaultPageSchema,
   vaultHistorySchema,
+  organizationSchema,
+  orgMemberSchema,
+  publicKeySchema,
+  invitationSchema,
+  invitationLookupSchema,
+  collectionSchema,
+  collectionMemberSchema,
+  orgAuditEntrySchema,
   type LoginResponse,
   type Profile,
   type TwoFactorSetup,
@@ -16,7 +24,16 @@ import {
   type VaultEntry,
   type VaultPage,
   type VaultHistoryEntry,
+  type Organization,
+  type OrgMember,
+  type PublicKey,
+  type Invitation,
+  type InvitationLookup,
+  type Collection,
+  type CollectionMember,
+  type OrgAuditEntry,
 } from "./schemas";
+import { z } from "zod";
 
 /** Thrown for any non-2xx response. `status` is the HTTP code, `message` the
  *  server's `detail` when available. */
@@ -42,6 +59,27 @@ export interface VaultInput {
 export type LoginResult =
   | { requires2fa: true }
   | ({ requires2fa: false } & LoginResponse);
+
+/** Wrapped keypair as sent to the server (snake_case wire format). */
+export interface KeypairPayload {
+  public_key: string;
+  encrypted_private_key: string;
+  private_key_iv: string;
+}
+
+/** Org key rotation payload (snake_case wire format). */
+export interface RotateKeyPayload {
+  remove_user_id?: string;
+  member_keys: { user_id: string; wrapped_org_key: string }[];
+  vault_items: { id: string; encrypted: string; iv: string }[];
+}
+
+/** Collection key rotation payload (snake_case wire format). */
+export interface CollectionRotatePayload {
+  remove_user_id?: string;
+  member_keys: { user_id: string; wrapped_collection_key: string }[];
+  vault_items: { id: string; encrypted: string; iv: string }[];
+}
 
 /**
  * Stateful API client. Holds the short-lived access token in memory and
@@ -116,10 +154,10 @@ export function createApiClient(baseUrl: string) {
     },
 
     // --- auth ---
-    register(email: string, authHash: string, salt: string): Promise<void> {
+    register(email: string, authHash: string, salt: string, keys?: KeypairPayload): Promise<void> {
       return request("/auth/register", {
         method: "POST",
-        body: JSON.stringify({ email, password: authHash, salt }),
+        body: JSON.stringify({ email, password: authHash, salt, ...keys }),
       });
     },
 
@@ -216,20 +254,188 @@ export function createApiClient(baseUrl: string) {
       return request("/auth/2fa/recovery/status", { method: "GET" }, recoveryStatusSchema);
     },
 
-    // --- vault ---
-    listVault(cursor?: string): Promise<VaultPage> {
-      const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-      return request(`/vault/${qs}`, { method: "GET" }, vaultPageSchema);
+    // --- keypair (org sharing) ---
+    /** Backfill the keypair for a legacy account that has none yet. */
+    uploadKeys(keys: KeypairPayload): Promise<void> {
+      return request("/profile/keys", { method: "POST", body: JSON.stringify(keys) });
     },
 
+    /** Fetch another user's public key (to wrap an org key for them). */
+    getPublicKey(email: string): Promise<PublicKey> {
+      return request(
+        `/profile/public-key?email=${encodeURIComponent(email)}`,
+        { method: "GET" },
+        publicKeySchema,
+      );
+    },
+
+    // --- organizations ---
+    listOrgs(): Promise<Organization[]> {
+      return request("/organizations/", { method: "GET" }, z.array(organizationSchema));
+    },
+
+    createOrg(name: string, wrappedOrgKey: string): Promise<Organization> {
+      return request(
+        "/organizations/",
+        { method: "POST", body: JSON.stringify({ name, wrapped_org_key: wrappedOrgKey }) },
+        organizationSchema,
+      );
+    },
+
+    listMembers(orgId: string): Promise<OrgMember[]> {
+      return request(`/organizations/${orgId}/members`, { method: "GET" }, z.array(orgMemberSchema));
+    },
+
+    addMember(orgId: string, email: string, role: string, wrappedOrgKey: string): Promise<OrgMember> {
+      return request(
+        `/organizations/${orgId}/members`,
+        { method: "POST", body: JSON.stringify({ email, role, wrapped_org_key: wrappedOrgKey }) },
+        orgMemberSchema,
+      );
+    },
+
+    /** Hand the org to another confirmed member (owner only). */
+    transferOwnership(orgId: string, userId: string): Promise<{ message: string }> {
+      return request(`/organizations/${orgId}/transfer-ownership`, {
+        method: "POST",
+        body: JSON.stringify({ user_id: userId }),
+      });
+    },
+
+    /** Delete an organization and all its shared data (owner only). */
+    deleteOrg(orgId: string): Promise<void> {
+      return request(`/organizations/${orgId}`, { method: "DELETE" });
+    },
+
+    changeMemberRole(orgId: string, userId: string, role: string): Promise<OrgMember> {
+      return request(
+        `/organizations/${orgId}/members/${userId}`,
+        { method: "PATCH", body: JSON.stringify({ role }) },
+        orgMemberSchema,
+      );
+    },
+
+    removeMember(orgId: string, userId: string): Promise<void> {
+      return request(`/organizations/${orgId}/members/${userId}`, { method: "DELETE" });
+    },
+
+    /** Toggle whether plain members can edit the org's shared entries (owner only). */
+    updateOrgSettings(orgId: string, memberWrite: boolean): Promise<Organization> {
+      return request(
+        `/organizations/${orgId}/settings`,
+        { method: "PATCH", body: JSON.stringify({ member_write: memberWrite }) },
+        organizationSchema,
+      );
+    },
+
+    /** Re-key an org: new wrapped keys for remaining members + re-encrypted items,
+     *  optionally removing a member in the same atomic call (admin+). */
+    rotateOrgKey(orgId: string, payload: RotateKeyPayload): Promise<{ message: string }> {
+      return request(`/organizations/${orgId}/rotate-key`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+
+    /** Confirm a pending member by storing the org key wrapped for them (admin+). */
+    confirmMember(orgId: string, userId: string, wrappedOrgKey: string): Promise<OrgMember> {
+      return request(
+        `/organizations/${orgId}/members/${userId}/confirm`,
+        { method: "POST", body: JSON.stringify({ wrapped_org_key: wrappedOrgKey }) },
+        orgMemberSchema,
+      );
+    },
+
+    // --- invitations ---
+    createInvitation(orgId: string, email: string, role: string): Promise<Invitation> {
+      return request(
+        `/organizations/${orgId}/invitations`,
+        { method: "POST", body: JSON.stringify({ email, role }) },
+        invitationSchema,
+      );
+    },
+
+    listInvitations(orgId: string): Promise<Invitation[]> {
+      return request(`/organizations/${orgId}/invitations`, { method: "GET" },
+        z.array(invitationSchema));
+    },
+
+    revokeInvitation(orgId: string, inviteId: string): Promise<void> {
+      return request(`/organizations/${orgId}/invitations/${inviteId}`, { method: "DELETE" });
+    },
+
+    lookupInvitation(token: string): Promise<InvitationLookup> {
+      return request(
+        `/organizations/invitations/lookup?token=${encodeURIComponent(token)}`,
+        { method: "GET" },
+        invitationLookupSchema,
+      );
+    },
+
+    acceptInvitation(token: string): Promise<{ org_id: string }> {
+      return request("/organizations/invitations/accept", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      });
+    },
+
+    // --- collections ---
+    listCollections(orgId: string): Promise<Collection[]> {
+      return request(`/organizations/${orgId}/collections/`, { method: "GET" },
+        z.array(collectionSchema));
+    },
+
+    createCollection(orgId: string, name: string, wrappedKey: string): Promise<Collection> {
+      return request(
+        `/organizations/${orgId}/collections/`,
+        { method: "POST", body: JSON.stringify({ name, wrapped_collection_key: wrappedKey }) },
+        collectionSchema,
+      );
+    },
+
+    listCollectionMembers(orgId: string, cid: string): Promise<CollectionMember[]> {
+      return request(`/organizations/${orgId}/collections/${cid}/members`, { method: "GET" },
+        z.array(collectionMemberSchema));
+    },
+
+    grantCollectionAccess(orgId: string, cid: string, email: string, wrappedKey: string): Promise<CollectionMember> {
+      return request(
+        `/organizations/${orgId}/collections/${cid}/access`,
+        { method: "POST", body: JSON.stringify({ email, wrapped_collection_key: wrappedKey }) },
+        collectionMemberSchema,
+      );
+    },
+
+    revokeCollectionAccess(orgId: string, cid: string, userId: string): Promise<void> {
+      return request(`/organizations/${orgId}/collections/${cid}/access/${userId}`,
+        { method: "DELETE" });
+    },
+
+    deleteCollection(orgId: string, cid: string): Promise<void> {
+      return request(`/organizations/${orgId}/collections/${cid}`, { method: "DELETE" });
+    },
+
+    /** Re-key a collection: new wrapped keys for remaining members + re-encrypted
+     *  items, optionally revoking a member in the same atomic call (admin+). */
+    rotateCollectionKey(orgId: string, cid: string, payload: CollectionRotatePayload): Promise<{ message: string }> {
+      return request(`/organizations/${orgId}/collections/${cid}/rotate-key`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+    },
+
+    // --- vault ---
     /** Fetch every entry by following the cursor. The client decrypts and
-     *  searches locally, so it needs the whole vault, not one page. */
-    async listAllVault(): Promise<VaultEntry[]> {
+     *  searches locally, so it needs the whole vault, not one page. `orgId`
+     *  selects an organization's shared vault instead of the personal one. */
+    async listAllVault(orgId?: string, collectionId?: string): Promise<VaultEntry[]> {
       const items: VaultEntry[] = [];
       let cursor: string | null = null;
       do {
         const params = new URLSearchParams({ limit: "100" });
         if (cursor) params.set("cursor", cursor);
+        if (orgId) params.set("org_id", orgId);
+        if (collectionId) params.set("collection_id", collectionId);
         const page = await request<VaultPage>(
           `/vault/?${params.toString()}`,
           { method: "GET" },
@@ -241,8 +447,13 @@ export function createApiClient(baseUrl: string) {
       return items;
     },
 
-    createVault(input: VaultInput): Promise<VaultEntry> {
-      return request("/vault/", { method: "POST", body: JSON.stringify(input) }, vaultEntrySchema);
+    createVault(input: VaultInput, orgId?: string, collectionId?: string): Promise<VaultEntry> {
+      const body = {
+        ...input,
+        ...(orgId ? { org_id: orgId } : {}),
+        ...(collectionId ? { collection_id: collectionId } : {}),
+      };
+      return request("/vault/", { method: "POST", body: JSON.stringify(body) }, vaultEntrySchema);
     },
 
     updateVault(id: string, input: VaultInput): Promise<VaultEntry> {
@@ -263,6 +474,23 @@ export function createApiClient(baseUrl: string) {
 
     deleteVault(id: string): Promise<void> {
       return request(`/vault/${id}`, { method: "DELETE" });
+    },
+
+    /** Record that the user opened a shared entry (org audit). Best-effort. */
+    logItemView(id: string): Promise<void> {
+      return request(`/vault/${id}/view`, { method: "POST" });
+    },
+
+    /** Organization activity feed (admin+). `collectionId` filters by collection,
+     *  the literal "general" filters to org-wide shared items, undefined = all. */
+    orgAudit(orgId: string, collectionId?: string, limit = 100, offset = 0): Promise<OrgAuditEntry[]> {
+      const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+      if (collectionId) params.set("collection_id", collectionId);
+      return request(
+        `/organizations/${orgId}/audit?${params.toString()}`,
+        { method: "GET" },
+        z.array(orgAuditEntrySchema),
+      );
     },
 
     /** Prior encrypted snapshots of an entry, newest first. */

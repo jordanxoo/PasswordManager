@@ -8,9 +8,11 @@ interface Props {
   item: VaultItem;
   onView: () => void;
   onTogglePin: () => void;
+  /** Hide write actions (pin) for read-only org members. */
+  readOnly?: boolean;
 }
 
-export function VaultRow({ item, onView, onTogglePin }: Props) {
+export function VaultRow({ item, onView, onTogglePin, readOnly }: Props) {
   return (
     <div className="flex items-center gap-1 px-2 transition-colors hover:bg-canvas">
       <button
@@ -27,13 +29,15 @@ export function VaultRow({ item, onView, onTogglePin }: Props) {
         </div>
       </button>
       <div className="flex items-center gap-0.5">
-        <IconButton
-          label={item.pinned ? "Unpin" : "Pin"}
-          onClick={onTogglePin}
-          className={cn(item.pinned && "text-amber-500 hover:text-amber-600")}
-        >
-          <Star size={16} className={cn(item.pinned && "fill-amber-400")} />
-        </IconButton>
+        {!readOnly && (
+          <IconButton
+            label={item.pinned ? "Unpin" : "Pin"}
+            onClick={onTogglePin}
+            className={cn(item.pinned && "text-amber-500 hover:text-amber-600")}
+          >
+            <Star size={16} className={cn(item.pinned && "fill-amber-400")} />
+          </IconButton>
+        )}
         <CopyButton value={item.username} label="Copy username">
           <User size={16} />
         </CopyButton>
