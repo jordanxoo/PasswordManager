@@ -121,4 +121,4 @@ async def test_delete_vault_success(mock_db):
 
     assert mock_vault.is_deleted == True
     mock_db.commit.assert_called_once()
-    assert result == {"message":"deleted"}
+    assert result is mock_vault

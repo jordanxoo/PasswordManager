@@ -58,6 +58,15 @@ async def _authorize_vault(db, vault, user_id, *, write):
         await _require_collection_access(db, vault.collection_id, user_id, write=write)
 
 
+async def get_vault_authorized(db, user_id, vault_id, *, write=False):
+    """Load a vault row and authorize the caller for it (used by the view-log endpoint)."""
+    vault = (await db.execute(select(Vault).where(Vault.id == vault_id))).scalar_one_or_none()
+    if vault is None:
+        raise HTTPException(status_code=404, detail="Not Found")
+    await _authorize_vault(db, vault, user_id, write=write)
+    return vault
+
+
 async def get_vaults(db, user_id, category=None, cursor=None, limit=20, org_id=None,
                      collection_id=None):
     if collection_id is not None:
@@ -198,7 +207,8 @@ async def delete_vault(db,user_id,vault_id):
     vault.is_deleted = True
     await db.commit()
     vault_operations_total.labels("delete").inc()
-    return {"message":"deleted"}
+    # Return the row so the router can stamp the audit log (org_id/collection_id).
+    return vault
 
 async def export_vaults(db,user_id):
     result = await db.execute(

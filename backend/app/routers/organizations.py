@@ -12,8 +12,9 @@ from app.schemas.organization import (
     MemberAddRequest, MemberResponse, RoleUpdateRequest, OrgSettingsRequest,
     InvitationCreate, InvitationResponse, InvitationLookupResponse,
     AcceptInviteRequest, ConfirmMemberRequest, RotateKeyRequest,
-    TransferOwnershipRequest,
+    TransferOwnershipRequest, OrgAuditEntry,
 )
+from app.services.audit_service import get_org_audit
 from app.services.organization_service import (
     create_organization, list_user_organizations, list_members,
     add_member, remove_member, change_member_role, update_settings,
@@ -42,7 +43,7 @@ async def create_organization_endpoint(
     org, membership = await create_organization(db, user_id, data.name, data.wrapped_org_key)
     await log_event(db, EventType.ORG_CREATED, request.client.host,
                     request.headers.get("user-agent"), user_id,
-                    metadata={"org_id": str(org.id)})
+                    metadata={"org_id": str(org.id)}, org_id=org.id)
     return OrganizationResponse(
         id=org.id, name=org.name, created_at=org.created_at,
         role=membership.role, wrapped_org_key=membership.wrapped_org_key,
@@ -124,7 +125,8 @@ async def create_invitation_endpoint(
     )
     await log_event(db, EventType.ORG_MEMBER_ADDED, request.client.host,
                     request.headers.get("user-agent"), str(membership.user_id),
-                    metadata={"org_id": str(org_id), "invited": invitation.email})
+                    metadata={"org_id": str(org_id), "invited": invitation.email},
+                    org_id=org_id)
     return invitation
 
 
@@ -160,7 +162,8 @@ async def confirm_member_endpoint(
     user = await _current_user(db, target_user_id)
     await log_event(db, EventType.ORG_MEMBER_ADDED, request.client.host,
                     request.headers.get("user-agent"), str(membership.user_id),
-                    metadata={"org_id": str(org_id), "confirmed_member": str(target_user_id)})
+                    metadata={"org_id": str(org_id), "confirmed_member": str(target_user_id)},
+                    org_id=org_id)
     return MemberResponse(
         user_id=user.id, email=user.email, role=updated.role,
         created_at=updated.created_at, confirmed=True,
@@ -178,7 +181,8 @@ async def transfer_ownership_endpoint(
     result = await transfer_ownership(db, org_id, membership, data.user_id)
     await log_event(db, EventType.ORG_ROLE_CHANGED, request.client.host,
                     request.headers.get("user-agent"), str(membership.user_id),
-                    metadata={"org_id": str(org_id), "new_owner": str(data.user_id)})
+                    metadata={"org_id": str(org_id), "new_owner": str(data.user_id)},
+                    org_id=org_id)
     return result
 
 
@@ -196,6 +200,23 @@ async def delete_organization_endpoint(
     return result
 
 
+@router.get("/{org_id}/audit", response_model=list[OrgAuditEntry])
+async def org_audit_endpoint(
+    org_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    membership = Depends(require_org_role(OrgRole.ADMIN)),
+    limit: int = 50,
+    offset: int = 0,
+    collection_id: str | None = None):
+
+    rows = await get_org_audit(db, org_id, min(limit, 100), offset, collection_id)
+    return [
+        OrgAuditEntry(id=log.id, actor_email=email, event_type=log.event_type,
+                      event_metadata=log.event_metadata, created_at=log.created_at)
+        for log, email in rows
+    ]
+
+
 @router.post("/{org_id}/rotate-key")
 async def rotate_key_endpoint(
     request: Request,
@@ -209,8 +230,9 @@ async def rotate_key_endpoint(
     meta = {"org_id": str(org_id)}
     if data.remove_user_id is not None:
         meta["removed_member"] = str(data.remove_user_id)
-    await log_event(db, EventType.ORG_MEMBER_REMOVED, request.client.host,
-                    request.headers.get("user-agent"), str(membership.user_id), metadata=meta)
+    await log_event(db, EventType.ORG_KEY_ROTATED, request.client.host,
+                    request.headers.get("user-agent"), str(membership.user_id), metadata=meta,
+                    org_id=org_id)
     return result
 
 
@@ -242,7 +264,8 @@ async def add_member_endpoint(
     new_membership, user = await add_member(db, org_id, data.email, data.role, data.wrapped_org_key)
     await log_event(db, EventType.ORG_MEMBER_ADDED, request.client.host,
                     request.headers.get("user-agent"), str(membership.user_id),
-                    metadata={"org_id": str(org_id), "member_id": str(user.id)})
+                    metadata={"org_id": str(org_id), "member_id": str(user.id)},
+                    org_id=org_id)
     return MemberResponse(
         user_id=user.id, email=user.email,
         role=new_membership.role, created_at=new_membership.created_at,
@@ -262,7 +285,8 @@ async def change_role_endpoint(
     await log_event(db, EventType.ORG_ROLE_CHANGED, request.client.host,
                     request.headers.get("user-agent"), str(membership.user_id),
                     metadata={"org_id": str(org_id), "member_id": str(target_user_id),
-                              "role": data.role.value})
+                              "role": data.role.value},
+                    org_id=org_id)
     # Re-fetch the email for the response.
     from app.models.models import User
     from sqlalchemy import select
@@ -284,5 +308,6 @@ async def remove_member_endpoint(
     result = await remove_member(db, org_id, target_user_id, membership)
     await log_event(db, EventType.ORG_MEMBER_REMOVED, request.client.host,
                     request.headers.get("user-agent"), str(membership.user_id),
-                    metadata={"org_id": str(org_id), "member_id": str(target_user_id)})
+                    metadata={"org_id": str(org_id), "member_id": str(target_user_id)},
+                    org_id=org_id)
     return result

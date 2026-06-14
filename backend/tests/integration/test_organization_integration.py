@@ -534,6 +534,76 @@ async def test_collection_key_rotation_on_revoke(e2e_client):
 
 
 @pytest.mark.asyncio
+async def test_org_audit_feed(e2e_client):
+    org_id, owner_h, b_h = await _org_with_two_members(e2e_client)
+
+    # Owner adds + B views/edits a shared entry.
+    item = (await e2e_client.post("/vault/", headers=owner_h,
+            json={"encrypted": "S", "iv": "AAAAAAAAAAAAAAAA", "org_id": org_id})).json()
+    await e2e_client.post(f"/vault/{item['id']}/view", headers=b_h)
+    await e2e_client.put(f"/vault/{item['id']}", headers=b_h,
+        json={"encrypted": "S2", "iv": "AAAAAAAAAAAAAAAA"})
+
+    audit = (await e2e_client.get(f"/organizations/{org_id}/audit", headers=owner_h)).json()
+    by_type = {}
+    for e in audit:
+        by_type.setdefault(e["event_type"], []).append(e)
+    # The member's view + edit, and the create, are all recorded with the actor.
+    assert any(e["actor_email"] == "b@test.com" for e in by_type.get("vault_read", []))
+    assert any(e["actor_email"] == "b@test.com" for e in by_type.get("vault_update", []))
+    assert any(e["actor_email"] == "owner@test.com" for e in by_type.get("vault_create", []))
+    # Management events are in the feed too (member was added).
+    assert "org_member_added" in by_type
+    # The audited entry carries the vault_id (names resolved client-side).
+    assert by_type["vault_read"][0]["event_metadata"]["vault_id"] == item["id"]
+
+    # A plain member cannot read the org audit.
+    assert (await e2e_client.get(f"/organizations/{org_id}/audit", headers=b_h)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_org_audit_collection_filter(e2e_client):
+    org_id, owner_h, _ = await _org_with_two_members(e2e_client)
+    gen = (await e2e_client.post("/vault/", headers=owner_h,
+           json={"encrypted": "G", "iv": "AAAAAAAAAAAAAAAA", "org_id": org_id})).json()
+    coll = (await e2e_client.post(f"/organizations/{org_id}/collections/", headers=owner_h,
+            json={"name": "Ops", "wrapped_collection_key": "CK"})).json()
+    citem = (await e2e_client.post("/vault/", headers=owner_h,
+             json={"encrypted": "C", "iv": "AAAAAAAAAAAAAAAA",
+                   "org_id": org_id, "collection_id": coll["id"]})).json()
+
+    def vault_ids(rows):
+        return {e["event_metadata"]["vault_id"] for e in rows
+                if e["event_type"].startswith("vault_") and e.get("event_metadata")}
+
+    # Filter by the collection -> only its item events.
+    by_coll = (await e2e_client.get(
+        f"/organizations/{org_id}/audit?collection_id={coll['id']}", headers=owner_h)).json()
+    assert citem["id"] in vault_ids(by_coll)
+    assert gen["id"] not in vault_ids(by_coll)
+
+    # "general" -> only org-wide (no-collection) item events, no management noise.
+    by_general = (await e2e_client.get(
+        f"/organizations/{org_id}/audit?collection_id=general", headers=owner_h)).json()
+    assert gen["id"] in vault_ids(by_general)
+    assert citem["id"] not in vault_ids(by_general)
+    assert all(e["event_type"].startswith("vault_") for e in by_general)
+
+
+@pytest.mark.asyncio
+async def test_personal_vault_not_in_org_audit(e2e_client):
+    org_id, owner_h, _ = await _org_with_two_members(e2e_client)
+    # A personal entry + its view must NOT appear in any org's audit.
+    p = (await e2e_client.post("/vault/", headers=owner_h,
+         json={"encrypted": "P", "iv": "AAAAAAAAAAAAAAAA"})).json()
+    await e2e_client.post(f"/vault/{p['id']}/view", headers=owner_h)
+    audit = (await e2e_client.get(f"/organizations/{org_id}/audit", headers=owner_h)).json()
+    vault_ids = [e["event_metadata"].get("vault_id") for e in audit
+                 if e.get("event_metadata")]
+    assert p["id"] not in vault_ids
+
+
+@pytest.mark.asyncio
 async def test_add_member_without_keys_fails(e2e_client):
     owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
     # A user registered without a keypair (legacy) cannot be wrapped for.

@@ -14,6 +14,7 @@ import {
   invitationLookupSchema,
   collectionSchema,
   collectionMemberSchema,
+  orgAuditEntrySchema,
   type LoginResponse,
   type Profile,
   type TwoFactorSetup,
@@ -28,6 +29,7 @@ import {
   type InvitationLookup,
   type Collection,
   type CollectionMember,
+  type OrgAuditEntry,
 } from "./schemas";
 import { z } from "zod";
 
@@ -470,6 +472,23 @@ export function createApiClient(baseUrl: string) {
 
     deleteVault(id: string): Promise<void> {
       return request(`/vault/${id}`, { method: "DELETE" });
+    },
+
+    /** Record that the user opened a shared entry (org audit). Best-effort. */
+    logItemView(id: string): Promise<void> {
+      return request(`/vault/${id}/view`, { method: "POST" });
+    },
+
+    /** Organization activity feed (admin+). `collectionId` filters by collection,
+     *  the literal "general" filters to org-wide shared items, undefined = all. */
+    orgAudit(orgId: string, collectionId?: string, limit = 100, offset = 0): Promise<OrgAuditEntry[]> {
+      const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+      if (collectionId) params.set("collection_id", collectionId);
+      return request(
+        `/organizations/${orgId}/audit?${params.toString()}`,
+        { method: "GET" },
+        z.array(orgAuditEntrySchema),
+      );
     },
   };
 }

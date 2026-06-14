@@ -35,6 +35,12 @@ class EventType(enum.Enum):
     ORG_MEMBER_ADDED = "org_member_added"
     ORG_MEMBER_REMOVED = "org_member_removed"
     ORG_ROLE_CHANGED = "org_role_changed"
+    ORG_KEY_ROTATED = "org_key_rotated"
+
+    COLLECTION_CREATED = "collection_created"
+    COLLECTION_DELETED = "collection_deleted"
+    COLLECTION_ACCESS_GRANTED = "collection_access_granted"
+    COLLECTION_ACCESS_REVOKED = "collection_access_revoked"
 
 
 class Role(enum.Enum):

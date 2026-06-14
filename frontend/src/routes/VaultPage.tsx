@@ -16,6 +16,7 @@ import {
 import { useOrgs, useActiveVaultKey } from "../lib/orgQueries";
 import { useCollections } from "../lib/collectionQueries";
 import { useVaultContext } from "../stores/vaultContext";
+import { api } from "../lib/api";
 import { generateMockDrafts, type VaultItem } from "../lib/vault";
 
 export function VaultPage() {
@@ -57,6 +58,11 @@ export function VaultPage() {
     setViewing(null);
     setEditing(item);
     setDialogOpen(true);
+  };
+  // Opening a shared entry is recorded in the org audit (best-effort).
+  const openView = (item: VaultItem) => {
+    setViewing(item);
+    if (orgId) void api.logItemView(item.id);
   };
 
   return (
@@ -159,7 +165,7 @@ export function VaultPage() {
                 >
                   <VaultRow
                     item={item}
-                    onView={() => setViewing(item)}
+                    onView={() => openView(item)}
                     onTogglePin={() => togglePin.mutate(item)}
                     readOnly={!canWrite}
                   />

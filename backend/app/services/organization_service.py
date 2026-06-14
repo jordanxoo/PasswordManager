@@ -6,7 +6,7 @@ import hashlib
 from datetime import datetime, timedelta
 from app.models.models import (
     Organization, OrganizationMembership, OrganizationInvitation, User,
-    Vault, VaultHistory,
+    Vault, VaultHistory, AuditLog, Collection, CollectionAccess,
 )
 from app.models.enums import OrgRole
 
@@ -329,10 +329,14 @@ async def delete_organization(db, org_id):
     org_vault_ids = select(Vault.id).where(Vault.org_id == org_id)
     await db.execute(delete(VaultHistory).where(VaultHistory.vault_id.in_(org_vault_ids)))
     await db.execute(delete(Vault).where(Vault.org_id == org_id))
+    await db.execute(delete(CollectionAccess).where(CollectionAccess.collection_id.in_(
+        select(Collection.id).where(Collection.org_id == org_id))))
+    await db.execute(delete(Collection).where(Collection.org_id == org_id))
     await db.execute(delete(OrganizationMembership).where(
         OrganizationMembership.org_id == org_id))
     await db.execute(delete(OrganizationInvitation).where(
         OrganizationInvitation.org_id == org_id))
+    await db.execute(delete(AuditLog).where(AuditLog.org_id == org_id))
     await db.execute(delete(Organization).where(Organization.id == org_id))
     await db.commit()
     return {"message": "deleted"}

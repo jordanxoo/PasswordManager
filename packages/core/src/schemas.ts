@@ -58,6 +58,15 @@ export const collectionMemberSchema = z.object({
 });
 export type CollectionMember = z.infer<typeof collectionMemberSchema>;
 
+export const orgAuditEntrySchema = z.object({
+  id: z.string(),
+  actor_email: z.string().nullable().optional(),
+  event_type: z.string(),
+  event_metadata: z.record(z.unknown()).nullable().optional(),
+  created_at: z.string().nullable().optional(),
+});
+export type OrgAuditEntry = z.infer<typeof orgAuditEntrySchema>;
+
 export const invitationLookupSchema = z.object({
   org_id: z.string(),
   org_name: z.string(),

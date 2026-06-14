@@ -126,6 +126,9 @@ class AuditLog(Base):
 
     id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
     user_id = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=True)
+    # Set when the event concerns an organization (shared-vault activity or
+    # management); NULL for personal-account events. Lets us scope an org's audit.
+    org_id = Column(UUID(as_uuid=True),ForeignKey("organizations.id"),nullable=True,index=True)
     ip_address = Column(String,nullable=True)
     user_agent = Column(String,nullable=True)
     event_type = Column(sa.Enum(EventType),nullable=False)

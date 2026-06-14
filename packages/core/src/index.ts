@@ -35,6 +35,7 @@ export {
   invitationLookupSchema,
   collectionSchema,
   collectionMemberSchema,
+  orgAuditEntrySchema,
 } from "./schemas";
 export type {
   LoginResponse,
@@ -51,4 +52,5 @@ export type {
   InvitationLookup,
   Collection,
   CollectionMember,
+  OrgAuditEntry,
 } from "./schemas";
