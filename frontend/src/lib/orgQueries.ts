@@ -4,6 +4,8 @@ import {
   importPublicKey,
   wrapOrgKey,
   unwrapOrgKey,
+  encryptEntry,
+  decryptEntry,
   type Organization,
 } from "@pm/core";
 import { api } from "./api";
@@ -147,6 +149,56 @@ export function useConfirmMember(org: Organization | undefined) {
       return api.confirmMember(org.id, userId, wrapped);
     },
     onSuccess: () => org && qc.invalidateQueries({ queryKey: membersKey(org.id) }),
+  });
+}
+
+/**
+ * Rotate the org key: generate a fresh key, re-encrypt every shared entry with
+ * it, and re-wrap it for every remaining confirmed member — optionally removing
+ * a member in the same atomic call. This invalidates the old key (which a
+ * removed member may have cached), since all current ciphertext is replaced.
+ */
+export function useRotateOrgKey(org: Organization | undefined) {
+  const qc = useQueryClient();
+  const privateKey = useAuth((s) => s.privateKey);
+  return useMutation({
+    mutationFn: async ({ removeUserId }: { removeUserId?: string }) => {
+      if (!org?.wrapped_org_key) throw new Error("Organization not loaded yet — try again in a moment.");
+      if (!privateKey) throw new Error("Session locked. Please sign in again.");
+      const oldKey = await unwrapOrgKey(org.wrapped_org_key, privateKey);
+      const newKey = await generateOrgKey();
+
+      // Re-encrypt every shared entry with the new key (opaque re-wrap, no parse).
+      const items = await api.listAllVault(org.id);
+      const vault_items = await Promise.all(
+        items.map(async (it) => {
+          const plain = await decryptEntry({ encrypted: it.encrypted, iv: it.iv }, oldKey);
+          const enc = await encryptEntry(plain, newKey);
+          return { id: it.id, encrypted: enc.encrypted, iv: enc.iv };
+        }),
+      );
+
+      // Wrap the new key for every remaining confirmed member (incl. the caller).
+      const members = await api.listMembers(org.id);
+      const remaining = members.filter((m) => m.confirmed && m.user_id !== removeUserId);
+      const member_keys = await Promise.all(
+        remaining.map(async (m) => {
+          const pk = await api.getPublicKey(m.email);
+          const pub = await importPublicKey(pk.public_key);
+          return { user_id: m.user_id, wrapped_org_key: await wrapOrgKey(newKey, pub) };
+        }),
+      );
+
+      return api.rotateOrgKey(org.id, { remove_user_id: removeUserId, member_keys, vault_items });
+    },
+    onSuccess: () => {
+      if (!org) return;
+      qc.invalidateQueries({ queryKey: ORGS_KEY });
+      qc.invalidateQueries({ queryKey: membersKey(org.id) });
+      // Drop the cached unwrapped key so it re-derives from the new wrapped copy.
+      qc.invalidateQueries({ queryKey: ["orgKey", org.id] });
+      qc.invalidateQueries({ queryKey: ["vault", org.id] });
+    },
   });
 }
 

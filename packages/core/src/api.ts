@@ -59,6 +59,13 @@ export interface KeypairPayload {
   private_key_iv: string;
 }
 
+/** Org key rotation payload (snake_case wire format). */
+export interface RotateKeyPayload {
+  remove_user_id?: string;
+  member_keys: { user_id: string; wrapped_org_key: string }[];
+  vault_items: { id: string; encrypted: string; iv: string }[];
+}
+
 /**
  * Stateful API client. Holds the short-lived access token in memory and
  * transparently refreshes it (via the httpOnly refresh-token cookie) on 401.
@@ -291,6 +298,15 @@ export function createApiClient(baseUrl: string) {
         { method: "PATCH", body: JSON.stringify({ member_write: memberWrite }) },
         organizationSchema,
       );
+    },
+
+    /** Re-key an org: new wrapped keys for remaining members + re-encrypted items,
+     *  optionally removing a member in the same atomic call (admin+). */
+    rotateOrgKey(orgId: string, payload: RotateKeyPayload): Promise<{ message: string }> {
+      return request(`/organizations/${orgId}/rotate-key`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
     },
 
     /** Confirm a pending member by storing the org key wrapped for them (admin+). */

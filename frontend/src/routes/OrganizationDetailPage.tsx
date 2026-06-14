@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, MailPlus, Trash2 } from "lucide-react";
+import { ArrowLeft, KeyRound, MailPlus, Trash2 } from "lucide-react";
 import { ApiError } from "@pm/core";
 import { useAuth } from "../stores/authStore";
 import {
@@ -13,6 +13,7 @@ import {
   useCreateInvitation,
   useRevokeInvitation,
   useConfirmMember,
+  useRotateOrgKey,
 } from "../lib/orgQueries";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -44,12 +45,43 @@ export function OrganizationDetailPage() {
   const createInvitation = useCreateInvitation(orgId);
   const revokeInvitation = useRevokeInvitation(orgId);
   const confirmMember = useConfirmMember(org);
+  const rotateKey = useRotateOrgKey(org);
 
   const [open, setOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("member");
   const [error, setError] = useState("");
   const [confirmError, setConfirmError] = useState("");
+
+  const busy = rotateKey.isPending;
+
+  // Removing a confirmed member re-keys the org (so their cached key dies);
+  // self-leave or a pending member is a plain removal.
+  async function onRemove(userId: string, memberEmail: string, confirmed: boolean) {
+    setConfirmError("");
+    const isSelf = memberEmail === email;
+    try {
+      if (confirmed && !isSelf) {
+        await rotateKey.mutateAsync({ removeUserId: userId });
+      } else {
+        await removeMember.mutateAsync(userId);
+      }
+    } catch (e) {
+      setConfirmError(errMsg(e, "Could not remove member"));
+    }
+  }
+
+  async function onRotate() {
+    setConfirmError("");
+    if (!window.confirm(
+      "Generate a new organization key and re-encrypt all shared items? " +
+      "Version history of shared items will be cleared.")) return;
+    try {
+      await rotateKey.mutateAsync({});
+    } catch (e) {
+      setConfirmError(errMsg(e, "Could not rotate key"));
+    }
+  }
 
   async function onInvite() {
     setError("");
@@ -91,9 +123,14 @@ export function OrganizationDetailPage() {
           <p className="mt-1 text-sm text-zinc-500">Members &amp; roles</p>
         </div>
         {canManage && org && (
-          <Button size="sm" onClick={() => setOpen(true)}>
-            <MailPlus size={16} /> Invite member
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" disabled={busy} onClick={() => void onRotate()}>
+              <KeyRound size={16} /> {busy ? "Re-keying…" : "Rotate key"}
+            </Button>
+            <Button size="sm" onClick={() => setOpen(true)}>
+              <MailPlus size={16} /> Invite member
+            </Button>
+          </div>
         )}
       </div>
 
@@ -165,8 +202,9 @@ export function OrganizationDetailPage() {
                   {m.role !== "owner" && (canManage || isSelf) && (
                     <button
                       aria-label={isSelf ? "Leave organization" : "Remove member"}
-                      onClick={() => void removeMember.mutate(m.user_id)}
-                      className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-500/10"
+                      disabled={busy || removeMember.isPending}
+                      onClick={() => void onRemove(m.user_id, m.email, m.confirmed)}
+                      className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-red-500/10 disabled:opacity-50"
                     >
                       <Trash2 size={16} />
                     </button>

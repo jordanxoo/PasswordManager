@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from fastapi import HTTPException
 import logging
 import secrets
@@ -6,6 +6,7 @@ import hashlib
 from datetime import datetime, timedelta
 from app.models.models import (
     Organization, OrganizationMembership, OrganizationInvitation, User,
+    Vault, VaultHistory,
 )
 from app.models.enums import OrgRole
 
@@ -235,6 +236,60 @@ async def confirm_member(db, org_id, target_user_id, wrapped_org_key):
     await db.commit()
     await db.refresh(target)
     return target
+
+
+async def rotate_org_key(db, org_id, remove_user_id, member_keys, vault_items):
+    """Re-key an organization: store the new wrapped org key for every remaining
+    confirmed member and replace every shared entry's ciphertext — atomically.
+
+    Old ciphertext is purged so a removed member's cached key becomes useless.
+    All crypto happens client-side; the server only persists the new blobs."""
+    # 1. Optionally remove a member as part of the same atomic operation.
+    if remove_user_id is not None:
+        target = await get_membership(db, org_id, remove_user_id)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Member not found")
+        if target.role == OrgRole.OWNER:
+            raise HTTPException(status_code=400, detail="Cannot remove the organization owner")
+        await db.delete(target)
+        await db.flush()
+
+    # 2. The new wrapped keys must cover exactly the remaining confirmed members.
+    confirmed = (await db.execute(
+        select(OrganizationMembership).where(
+            OrganizationMembership.org_id == org_id,
+            OrganizationMembership.wrapped_org_key.isnot(None)))).scalars().all()
+    by_user = {str(m.user_id): m for m in confirmed}
+    provided = {str(mk.user_id): mk.wrapped_org_key for mk in member_keys}
+    if set(provided) != set(by_user):
+        raise HTTPException(
+            status_code=400,
+            detail="member_keys must cover exactly the remaining confirmed members")
+
+    # 3. The re-encrypted items must cover exactly the active shared entries.
+    rows = (await db.execute(
+        select(Vault).where(Vault.org_id == org_id))).scalars().all()
+    active = {str(v.id): v for v in rows if not v.is_deleted}
+    provided_items = {str(i.id): i for i in vault_items}
+    if set(provided_items) != set(active):
+        raise HTTPException(
+            status_code=400,
+            detail="vault_items must cover exactly the active shared entries")
+
+    # 4. Apply: new wrapped keys + new ciphertext.
+    for uid, wrapped in provided.items():
+        by_user[uid].wrapped_org_key = wrapped
+    for vid, item in provided_items.items():
+        active[vid].encrypted = item.encrypted
+        active[vid].iv = item.iv
+
+    # 5. Purge any remaining old-key ciphertext: shared-entry history + org trash.
+    org_vault_ids = select(Vault.id).where(Vault.org_id == org_id)
+    await db.execute(delete(VaultHistory).where(VaultHistory.vault_id.in_(org_vault_ids)))
+    await db.execute(delete(Vault).where(Vault.org_id == org_id, Vault.is_deleted == True))
+
+    await db.commit()
+    return {"message": "rotated"}
 
 
 async def change_member_role(db, org_id, target_user_id, new_role):

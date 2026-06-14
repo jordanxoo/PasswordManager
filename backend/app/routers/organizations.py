@@ -11,13 +11,13 @@ from app.schemas.organization import (
     OrganizationCreate, OrganizationResponse,
     MemberAddRequest, MemberResponse, RoleUpdateRequest, OrgSettingsRequest,
     InvitationCreate, InvitationResponse, InvitationLookupResponse,
-    AcceptInviteRequest, ConfirmMemberRequest,
+    AcceptInviteRequest, ConfirmMemberRequest, RotateKeyRequest,
 )
 from app.services.organization_service import (
     create_organization, list_user_organizations, list_members,
     add_member, remove_member, change_member_role, update_settings,
     create_invitation, list_invitations, revoke_invitation,
-    lookup_invitation, accept_invitation, confirm_member,
+    lookup_invitation, accept_invitation, confirm_member, rotate_org_key,
 )
 from app.services.audit_service import log_event
 from app.publishers.notification_publisher import publish_email
@@ -163,6 +163,24 @@ async def confirm_member_endpoint(
         user_id=user.id, email=user.email, role=updated.role,
         created_at=updated.created_at, confirmed=True,
     )
+
+
+@router.post("/{org_id}/rotate-key")
+async def rotate_key_endpoint(
+    request: Request,
+    org_id: UUID,
+    data: RotateKeyRequest,
+    db: AsyncSession = Depends(get_db),
+    membership = Depends(require_org_role(OrgRole.ADMIN))):
+
+    result = await rotate_org_key(db, org_id, data.remove_user_id,
+                                  data.member_keys, data.vault_items)
+    meta = {"org_id": str(org_id)}
+    if data.remove_user_id is not None:
+        meta["removed_member"] = str(data.remove_user_id)
+    await log_event(db, EventType.ORG_MEMBER_REMOVED, request.client.host,
+                    request.headers.get("user-agent"), str(membership.user_id), metadata=meta)
+    return result
 
 
 @router.get("/{org_id}/members", response_model=list[MemberResponse])

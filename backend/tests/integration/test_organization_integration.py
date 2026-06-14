@@ -265,6 +265,73 @@ async def test_invitation_rbac_and_revoke(e2e_client, db):
 
 
 @pytest.mark.asyncio
+async def test_rotate_key_on_member_removal(e2e_client):
+    owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
+    b_h, _ = await _register_and_login(e2e_client, "b@test.com", "PUB_B")
+    c_h, _ = await _register_and_login(e2e_client, "c@test.com", "PUB_C")
+    org = (await e2e_client.post("/organizations/", headers=owner_h,
+           json={"name": "Acme", "wrapped_org_key": "WO"})).json()
+    org_id = org["id"]
+    for em, wk in [("b@test.com", "WB"), ("c@test.com", "WC")]:
+        await e2e_client.post(f"/organizations/{org_id}/members", headers=owner_h,
+                              json={"email": em, "role": "member", "wrapped_org_key": wk})
+    item = (await e2e_client.post("/vault/", headers=owner_h,
+            json={"encrypted": "OLD", "iv": "AAAAAAAAAAAAAAAA", "org_id": org_id})).json()
+    members = (await e2e_client.get(f"/organizations/{org_id}/members", headers=owner_h)).json()
+    ids = {m["email"]: m["user_id"] for m in members}
+
+    # Rotate, removing B; provide new keys for owner + C and re-encrypted item.
+    payload = {
+        "remove_user_id": ids["b@test.com"],
+        "member_keys": [
+            {"user_id": ids["owner@test.com"], "wrapped_org_key": "WO2"},
+            {"user_id": ids["c@test.com"], "wrapped_org_key": "WC2"},
+        ],
+        "vault_items": [{"id": item["id"], "encrypted": "NEW", "iv": "BBBBBBBBBBBBBBBB"}],
+    }
+    r = await e2e_client.post(f"/organizations/{org_id}/rotate-key", headers=owner_h, json=payload)
+    assert r.status_code == 200
+
+    members2 = (await e2e_client.get(f"/organizations/{org_id}/members", headers=owner_h)).json()
+    assert "b@test.com" not in [m["email"] for m in members2]
+
+    owner_orgs = (await e2e_client.get("/organizations/", headers=owner_h)).json()
+    assert next(o for o in owner_orgs if o["id"] == org_id)["wrapped_org_key"] == "WO2"
+    c_orgs = (await e2e_client.get("/organizations/", headers=c_h)).json()
+    assert next(o for o in c_orgs if o["id"] == org_id)["wrapped_org_key"] == "WC2"
+
+    listed = (await e2e_client.get(f"/vault/?org_id={org_id}", headers=owner_h)).json()
+    assert [i["encrypted"] for i in listed["items"]] == ["NEW"]
+
+    # The removed member loses access entirely.
+    assert (await e2e_client.get(f"/vault/?org_id={org_id}", headers=b_h)).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_rotate_key_validation_and_rbac(e2e_client):
+    owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
+    m_h, _ = await _register_and_login(e2e_client, "m@test.com", "PUB_M")
+    org = (await e2e_client.post("/organizations/", headers=owner_h,
+           json={"name": "Acme", "wrapped_org_key": "WO"})).json()
+    org_id = org["id"]
+    await e2e_client.post(f"/organizations/{org_id}/members", headers=owner_h,
+                          json={"email": "m@test.com", "role": "member", "wrapped_org_key": "WM"})
+    members = (await e2e_client.get(f"/organizations/{org_id}/members", headers=owner_h)).json()
+    ids = {m["email"]: m["user_id"] for m in members}
+
+    # A plain member cannot rotate.
+    denied = await e2e_client.post(f"/organizations/{org_id}/rotate-key", headers=m_h,
+                                   json={"member_keys": [], "vault_items": []})
+    assert denied.status_code == 403
+
+    # Incomplete member_keys (omits a confirmed member) is rejected.
+    bad = await e2e_client.post(f"/organizations/{org_id}/rotate-key", headers=owner_h, json={
+        "member_keys": [{"user_id": ids["owner@test.com"], "wrapped_org_key": "X"}],
+        "vault_items": []})
+    assert bad.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_add_member_without_keys_fails(e2e_client):
     owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
     # A user registered without a keypair (legacy) cannot be wrapped for.

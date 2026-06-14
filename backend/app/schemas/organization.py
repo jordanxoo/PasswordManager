@@ -82,6 +82,26 @@ class ConfirmMemberRequest(BaseModel):
     wrapped_org_key: str = Field(min_length=1, max_length=8192)
 
 
+class MemberKey(BaseModel):
+    user_id: UUID
+    wrapped_org_key: str = Field(min_length=1, max_length=8192)
+
+
+class RotatedItem(BaseModel):
+    id: UUID
+    encrypted: str = Field(max_length=100_000)
+    iv: str = Field(min_length=16, max_length=16)
+
+
+class RotateKeyRequest(BaseModel):
+    # Optionally remove a member as part of the same atomic re-key.
+    remove_user_id: UUID | None = None
+    # New org key wrapped for every remaining confirmed member (incl. the caller).
+    member_keys: list[MemberKey]
+    # Every shared entry, re-encrypted with the new org key.
+    vault_items: list[RotatedItem]
+
+
 class PublicKeyResponse(BaseModel):
     user_id: UUID
     email: str
