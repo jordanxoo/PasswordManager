@@ -97,6 +97,34 @@ class TransferOwnershipRequest(BaseModel):
     user_id: UUID
 
 
+class CollectionCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    # The new collection's AES key, wrapped with the creator's own public key.
+    wrapped_collection_key: str = Field(min_length=1, max_length=8192)
+
+
+class CollectionResponse(BaseModel):
+    model_config = {"from_attributes": True}
+    id: UUID
+    name: str
+    created_at: datetime
+    # Caller's wrapped copy of the collection key (unwrap with their private key).
+    wrapped_collection_key: str
+
+
+class CollectionAccessGrant(BaseModel):
+    email: EmailStr
+    # Collection key wrapped with the target member's public key.
+    wrapped_collection_key: str = Field(min_length=1, max_length=8192)
+
+
+class CollectionMemberResponse(BaseModel):
+    model_config = {"from_attributes": True}
+    user_id: UUID
+    email: str
+    created_at: datetime
+
+
 class RotateKeyRequest(BaseModel):
     # Optionally remove a member as part of the same atomic re-key.
     remove_user_id: UUID | None = None

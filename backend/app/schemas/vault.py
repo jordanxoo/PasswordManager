@@ -13,6 +13,8 @@ class VaultCreate(BaseModel):
     # When set, the entry is shared with this organization (encrypted with the
     # org key) instead of being personal.
     org_id: Optional[UUID] = None
+    # When set, the entry belongs to a collection (encrypted with the collection key).
+    collection_id: Optional[UUID] = None
 
     @field_validator("iv")
     @classmethod
@@ -60,6 +62,7 @@ class VaultResponse(BaseModel):
     category: Optional[Category] = None
     pinned: bool = False
     org_id: Optional[UUID] = None
+    collection_id: Optional[UUID] = None
 
 class VaultPinRequest(BaseModel):
     pinned: bool

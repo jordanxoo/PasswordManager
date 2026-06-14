@@ -43,6 +43,21 @@ export const invitationSchema = z.object({
 });
 export type Invitation = z.infer<typeof invitationSchema>;
 
+export const collectionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  created_at: z.string(),
+  wrapped_collection_key: z.string(),
+});
+export type Collection = z.infer<typeof collectionSchema>;
+
+export const collectionMemberSchema = z.object({
+  user_id: z.string(),
+  email: z.string(),
+  created_at: z.string(),
+});
+export type CollectionMember = z.infer<typeof collectionMemberSchema>;
+
 export const invitationLookupSchema = z.object({
   org_id: z.string(),
   org_name: z.string(),
@@ -100,6 +115,7 @@ export const vaultEntrySchema = z.object({
   category: z.string().nullable().optional(),
   pinned: z.boolean(),
   org_id: z.string().nullable().optional(),
+  collection_id: z.string().nullable().optional(),
 });
 export type VaultEntry = z.infer<typeof vaultEntrySchema>;
 

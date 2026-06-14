@@ -12,6 +12,8 @@ import {
   publicKeySchema,
   invitationSchema,
   invitationLookupSchema,
+  collectionSchema,
+  collectionMemberSchema,
   type LoginResponse,
   type Profile,
   type TwoFactorSetup,
@@ -24,6 +26,8 @@ import {
   type PublicKey,
   type Invitation,
   type InvitationLookup,
+  type Collection,
+  type CollectionMember,
 } from "./schemas";
 import { z } from "zod";
 
@@ -364,17 +368,54 @@ export function createApiClient(baseUrl: string) {
       });
     },
 
+    // --- collections ---
+    listCollections(orgId: string): Promise<Collection[]> {
+      return request(`/organizations/${orgId}/collections/`, { method: "GET" },
+        z.array(collectionSchema));
+    },
+
+    createCollection(orgId: string, name: string, wrappedKey: string): Promise<Collection> {
+      return request(
+        `/organizations/${orgId}/collections/`,
+        { method: "POST", body: JSON.stringify({ name, wrapped_collection_key: wrappedKey }) },
+        collectionSchema,
+      );
+    },
+
+    listCollectionMembers(orgId: string, cid: string): Promise<CollectionMember[]> {
+      return request(`/organizations/${orgId}/collections/${cid}/members`, { method: "GET" },
+        z.array(collectionMemberSchema));
+    },
+
+    grantCollectionAccess(orgId: string, cid: string, email: string, wrappedKey: string): Promise<CollectionMember> {
+      return request(
+        `/organizations/${orgId}/collections/${cid}/access`,
+        { method: "POST", body: JSON.stringify({ email, wrapped_collection_key: wrappedKey }) },
+        collectionMemberSchema,
+      );
+    },
+
+    revokeCollectionAccess(orgId: string, cid: string, userId: string): Promise<void> {
+      return request(`/organizations/${orgId}/collections/${cid}/access/${userId}`,
+        { method: "DELETE" });
+    },
+
+    deleteCollection(orgId: string, cid: string): Promise<void> {
+      return request(`/organizations/${orgId}/collections/${cid}`, { method: "DELETE" });
+    },
+
     // --- vault ---
     /** Fetch every entry by following the cursor. The client decrypts and
      *  searches locally, so it needs the whole vault, not one page. `orgId`
      *  selects an organization's shared vault instead of the personal one. */
-    async listAllVault(orgId?: string): Promise<VaultEntry[]> {
+    async listAllVault(orgId?: string, collectionId?: string): Promise<VaultEntry[]> {
       const items: VaultEntry[] = [];
       let cursor: string | null = null;
       do {
         const params = new URLSearchParams({ limit: "100" });
         if (cursor) params.set("cursor", cursor);
         if (orgId) params.set("org_id", orgId);
+        if (collectionId) params.set("collection_id", collectionId);
         const page = await request<VaultPage>(
           `/vault/?${params.toString()}`,
           { method: "GET" },
@@ -386,8 +427,12 @@ export function createApiClient(baseUrl: string) {
       return items;
     },
 
-    createVault(input: VaultInput, orgId?: string): Promise<VaultEntry> {
-      const body = orgId ? { ...input, org_id: orgId } : input;
+    createVault(input: VaultInput, orgId?: string, collectionId?: string): Promise<VaultEntry> {
+      const body = {
+        ...input,
+        ...(orgId ? { org_id: orgId } : {}),
+        ...(collectionId ? { collection_id: collectionId } : {}),
+      };
       return request("/vault/", { method: "POST", body: JSON.stringify(body) }, vaultEntrySchema);
     },
 

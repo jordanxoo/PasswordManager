@@ -8,9 +8,10 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import select,or_,and_,func
 import base64
 import json
-from app.models.models import Vault,VaultHistory,Organization
+from app.models.models import Vault,VaultHistory,Organization,Collection
 from app.models.enums import OrgRole
 from app.services.organization_service import get_membership, ROLE_RANK
+from app.services.collection_service import get_collection_access
 from sqlalchemy import select,or_,and_,func,delete
 from uuid import UUID
 
@@ -32,20 +33,42 @@ async def _require_member(db, org_id, user_id, *, write):
     return membership
 
 
+async def _require_collection_access(db, collection_id, user_id, *, write):
+    """Require the user has access to the collection; for writes also enforce the
+    owning org's member_write policy (same rule as org-wide shared entries)."""
+    if await get_collection_access(db, collection_id, user_id) is None:
+        raise HTTPException(status_code=403, detail="No access to this collection")
+    if write:
+        coll = (await db.execute(
+            select(Collection).where(Collection.id == collection_id))).scalar_one_or_none()
+        if coll is None:
+            raise HTTPException(status_code=404, detail="Collection not found")
+        await _require_member(db, coll.org_id, user_id, write=True)
+
+
 async def _authorize_vault(db, vault, user_id, *, write):
-    """Authorize access to a single vault row: personal entries by ownership,
-    org-shared entries by membership (+ write policy)."""
+    """Authorize a single vault row: personal by ownership, org-wide 'General' by
+    membership, collection entries by collection access (all with write policy)."""
     if vault.org_id is None:
         if str(vault.user_id) != user_id:
             raise HTTPException(status_code=403, detail="Forbidden")
-        return
-    await _require_member(db, vault.org_id, user_id, write=write)
+    elif vault.collection_id is None:
+        await _require_member(db, vault.org_id, user_id, write=write)
+    else:
+        await _require_collection_access(db, vault.collection_id, user_id, write=write)
 
 
-async def get_vaults(db, user_id, category=None, cursor=None, limit=20, org_id=None):
-    if org_id is not None:
+async def get_vaults(db, user_id, category=None, cursor=None, limit=20, org_id=None,
+                     collection_id=None):
+    if collection_id is not None:
+        await _require_collection_access(db, collection_id, user_id, write=False)
+        query = select(Vault).where(Vault.collection_id == collection_id,
+                                    Vault.is_deleted == False)
+    elif org_id is not None:
+        # Org-wide "General" — org entries not in any collection.
         await _require_member(db, org_id, user_id, write=False)
-        query = select(Vault).where(Vault.org_id == org_id, Vault.is_deleted == False)
+        query = select(Vault).where(Vault.org_id == org_id, Vault.collection_id.is_(None),
+                                    Vault.is_deleted == False)
     else:
         # Personal vault only — exclude org-shared entries this user authored.
         query = select(Vault).where(Vault.user_id == user_id,
@@ -87,18 +110,26 @@ async def get_vaults(db, user_id, category=None, cursor=None, limit=20, org_id=N
 async def create_vault(db,user_id,data):
 
     org_id = getattr(data, "org_id", None)
-    if org_id is not None:
+    collection_id = getattr(data, "collection_id", None)
+    if collection_id is not None:
+        await _require_collection_access(db, collection_id, user_id, write=True)
+        # Derive org_id from the collection so it can't be spoofed.
+        coll = (await db.execute(
+            select(Collection).where(Collection.id == collection_id))).scalar_one()
+        org_id = coll.org_id
+    elif org_id is not None:
         await _require_member(db, org_id, user_id, write=True)
 
     vault = Vault(
         user_id = user_id,
         org_id = org_id,
+        collection_id = collection_id,
         encrypted = data.encrypted,
         iv = data.iv,
         expires_at = data.expires_at,
         category = data.category
     )
-    count = await get_vault_count(db,user_id,org_id)
+    count = await get_vault_count(db,user_id,org_id,collection_id)
     if count >= 1000:
         raise HTTPException(status_code=400, detail="Vault limit reached (max 1000 entries)")
 
@@ -202,10 +233,12 @@ async def import_vaults(db,user_id,entries):
     vault_operations_total.labels("create").inc()
     return len(vaults)
 
-async def get_vault_count(db, user_id, org_id=None):
+async def get_vault_count(db, user_id, org_id=None, collection_id=None):
     query = select(func.count()).select_from(Vault)
-    if org_id is not None:
-        query = query.where(Vault.org_id == org_id)
+    if collection_id is not None:
+        query = query.where(Vault.collection_id == collection_id)
+    elif org_id is not None:
+        query = query.where(Vault.org_id == org_id, Vault.collection_id.is_(None))
     else:
         query = query.where(Vault.user_id == user_id, Vault.org_id.is_(None))
     result = await db.execute(query)

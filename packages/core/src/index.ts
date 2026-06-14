@@ -33,6 +33,8 @@ export {
   publicKeySchema,
   invitationSchema,
   invitationLookupSchema,
+  collectionSchema,
+  collectionMemberSchema,
 } from "./schemas";
 export type {
   LoginResponse,
@@ -47,4 +49,6 @@ export type {
   PublicKey,
   Invitation,
   InvitationLookup,
+  Collection,
+  CollectionMember,
 } from "./schemas";

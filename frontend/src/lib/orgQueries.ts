@@ -11,6 +11,7 @@ import {
 import { api } from "./api";
 import { useAuth } from "../stores/authStore";
 import { useVaultContext } from "../stores/vaultContext";
+import { useCollections } from "./collectionQueries";
 
 const ORGS_KEY = ["organizations"] as const;
 const membersKey = (orgId: string) => ["organizations", orgId, "members"] as const;
@@ -240,24 +241,32 @@ const ROLE_RANK: Record<string, number> = { member: 1, admin: 2, owner: 3 };
  */
 export function useActiveVaultKey() {
   const orgId = useVaultContext((s) => s.orgId);
+  const collectionId = useVaultContext((s) => s.collectionId);
   const encryptionKey = useAuth((s) => s.encryptionKey);
   const privateKey = useAuth((s) => s.privateKey);
   const { data: orgs } = useOrgs();
+  const { data: collections } = useCollections(orgId);
   const org = orgId ? orgs?.find((o) => o.id === orgId) : undefined;
+  const collection = collectionId ? collections?.find((c) => c.id === collectionId) : undefined;
 
-  const orgKeyQuery = useQuery({
-    queryKey: ["orgKey", orgId],
-    enabled: !!org?.wrapped_org_key && !!privateKey,
+  // The wrapped key for the active context: a collection key, the org key, or none.
+  const wrapped = collectionId ? collection?.wrapped_collection_key : org?.wrapped_org_key;
+  const keyQuery = useQuery({
+    // Prefix ["orgKey", orgId] so org-key rotation (which invalidates that prefix)
+    // also drops the cached unwrapped key here.
+    queryKey: ["orgKey", orgId, collectionId],
+    enabled: !!wrapped && !!privateKey,
     staleTime: Infinity,
-    queryFn: () => unwrapOrgKey(org!.wrapped_org_key!, privateKey!),
+    queryFn: () => unwrapOrgKey(wrapped!, privateKey!),
   });
 
   if (!orgId) {
     return { key: encryptionKey ?? undefined, isLoading: false, canWrite: true, pending: false };
   }
-  // Member accepted an invite but an admin hasn't granted the org key yet.
-  const pending = !!org && !org.wrapped_org_key;
-  const canWrite =
-    !pending && !!org && (org.member_write || ROLE_RANK[org.role] >= ROLE_RANK.admin);
-  return { key: orgKeyQuery.data, isLoading: orgKeyQuery.isLoading, canWrite, pending };
+  // Org-wide "General" is pending while the member has no org key yet.
+  const pending = !collectionId && !!org && !org.wrapped_org_key;
+  const orgWritable = !!org && (org.member_write || ROLE_RANK[org.role] >= ROLE_RANK.admin);
+  // For a collection you also need access (the wrapped collection key) to write.
+  const canWrite = orgWritable && (collectionId ? !!collection : !pending);
+  return { key: keyQuery.data, isLoading: keyQuery.isLoading, canWrite, pending };
 }

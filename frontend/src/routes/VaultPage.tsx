@@ -14,13 +14,17 @@ import {
   useVaultItems,
 } from "../lib/vaultQueries";
 import { useOrgs, useActiveVaultKey } from "../lib/orgQueries";
+import { useCollections } from "../lib/collectionQueries";
 import { useVaultContext } from "../stores/vaultContext";
 import { generateMockDrafts, type VaultItem } from "../lib/vault";
 
 export function VaultPage() {
   const orgId = useVaultContext((s) => s.orgId);
   const setOrgId = useVaultContext((s) => s.setOrgId);
+  const collectionId = useVaultContext((s) => s.collectionId);
+  const setCollectionId = useVaultContext((s) => s.setCollectionId);
   const { data: orgs } = useOrgs();
+  const { data: collections } = useCollections(orgId);
   const { canWrite, pending } = useActiveVaultKey();
   const { data: items, isLoading, isError } = useVaultItems();
   const togglePin = useTogglePin();
@@ -74,6 +78,21 @@ export function VaultPage() {
                 </option>
               ))}
             </select>
+            {orgId && (
+              <select
+                aria-label="Collection"
+                value={collectionId ?? ""}
+                onChange={(e) => setCollectionId(e.target.value || null)}
+                className="h-8 rounded-md border border-zinc-200 bg-surface px-2 text-[13px] text-zinc-700"
+              >
+                <option value="">General</option>
+                {collections?.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <p className="mt-1 text-sm text-zinc-500">
             {!canWrite

@@ -19,6 +19,7 @@ import {
   useDeleteOrg,
   orgMembersKey,
 } from "../lib/orgQueries";
+import { CollectionsSection } from "../components/collections/CollectionsSection";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Field } from "../components/ui/Field";
@@ -293,6 +294,8 @@ export function OrganizationDetailPage() {
           </ul>
         </div>
       )}
+
+      {canManage && <CollectionsSection orgId={orgId} />}
 
       {isOwner && org && (
         <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50/40 p-4">

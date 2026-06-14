@@ -34,6 +34,9 @@ class Vault(Base):
     # When set, the entry is org-shared (encrypted with the org key) instead of
     # personal. user_id then identifies the creator. Personal entry => org_id NULL.
     org_id = Column(UUID(as_uuid=True),ForeignKey("organizations.id"),nullable=True)
+    # When set, the entry belongs to a collection (encrypted with that collection's
+    # key, visible only to members with access). NULL + org_id set => org-wide "General".
+    collection_id = Column(UUID(as_uuid=True),ForeignKey("collections.id"),nullable=True)
     encrypted = Column(String,nullable=False)
     iv = Column(String,nullable=False)
     created_at = Column(DateTime,default= datetime.now)
@@ -69,6 +72,27 @@ class OrganizationMembership(Base):
     # NULL while a member is "pending confirmation": they accepted an invite but
     # an admin has not yet wrapped the org key for them.
     wrapped_org_key = Column(String,nullable=True)
+    created_at = Column(DateTime,default=datetime.now)
+
+
+class Collection(Base):
+    __tablename__ = "collections"
+
+    id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
+    org_id = Column(UUID(as_uuid=True),ForeignKey("organizations.id"),nullable=False)
+    name = Column(String,nullable=False)
+    created_at = Column(DateTime,default=datetime.now)
+
+
+class CollectionAccess(Base):
+    __tablename__ = "collection_access"
+    __table_args__ = (UniqueConstraint("collection_id","user_id",name="uq_collection_member"),)
+
+    id = Column(UUID(as_uuid=True),primary_key=True,default=uuid4)
+    collection_id = Column(UUID(as_uuid=True),ForeignKey("collections.id"),nullable=False,index=True)
+    user_id = Column(UUID(as_uuid=True),ForeignKey("users.id"),nullable=False)
+    # The collection's AES key, wrapped (RSA-OAEP) with this member's public key.
+    wrapped_collection_key = Column(String,nullable=False)
     created_at = Column(DateTime,default=datetime.now)
 
 

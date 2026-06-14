@@ -35,6 +35,7 @@ async def test_create_vault_adds_and_commits(mock_db):
     data.expires_at = None
     data.category = None
     data.org_id = None
+    data.collection_id = None
 
     await create_vault(mock_db,"user-123",data)
 

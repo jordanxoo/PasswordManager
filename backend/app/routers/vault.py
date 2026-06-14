@@ -20,9 +20,11 @@ async def get_vaults_endpoint(
     category: Optional[Category] = None,
     cursor: Optional[str] = None,
     limit: int = 20,
-    org_id: Optional[UUID] = None):
+    org_id: Optional[UUID] = None,
+    collection_id: Optional[UUID] = None):
 
-    items, next_cursor, has_next = await get_vaults(db, user_id, category, cursor, limit, org_id)
+    items, next_cursor, has_next = await get_vaults(db, user_id, category, cursor, limit,
+                                                    org_id, collection_id)
     await publish_vault_event("read", user_id)
     await log_event(db, EventType.VAULT_READ, request.client.host,
                     request.headers.get("user-agent"), user_id)

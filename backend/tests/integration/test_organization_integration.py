@@ -425,6 +425,77 @@ async def test_delete_organization(e2e_client):
     assert (await e2e_client.get(f"/vault/?org_id={org_id}", headers=owner_h)).status_code == 403
 
 
+async def _org_with_two_members(e2e_client):
+    owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
+    b_h, _ = await _register_and_login(e2e_client, "b@test.com", "PUB_B")
+    org = (await e2e_client.post("/organizations/", headers=owner_h,
+           json={"name": "Acme", "wrapped_org_key": "WO"})).json()
+    await e2e_client.post(f"/organizations/{org['id']}/members", headers=owner_h,
+                          json={"email": "b@test.com", "role": "member", "wrapped_org_key": "WB"})
+    return org["id"], owner_h, b_h
+
+
+@pytest.mark.asyncio
+async def test_collection_isolation(e2e_client):
+    org_id, owner_h, b_h = await _org_with_two_members(e2e_client)
+
+    # Owner creates a collection (key wrapped for self) and adds an item to it.
+    coll = (await e2e_client.post(f"/organizations/{org_id}/collections/", headers=owner_h,
+            json={"name": "DevOps", "wrapped_collection_key": "CK_OWNER"})).json()
+    cid = coll["id"]
+    await e2e_client.post("/vault/", headers=owner_h,
+        json={"encrypted": "SECRET", "iv": "AAAAAAAAAAAAAAAA", "org_id": org_id, "collection_id": cid})
+
+    # Owner (has access) sees the collection and its item.
+    assert [c["id"] for c in (await e2e_client.get(
+        f"/organizations/{org_id}/collections/", headers=owner_h)).json()] == [cid]
+    owner_items = (await e2e_client.get(f"/vault/?collection_id={cid}", headers=owner_h)).json()
+    assert [i["encrypted"] for i in owner_items["items"]] == ["SECRET"]
+
+    # Member B (no access) sees no collections and is denied the collection vault.
+    assert (await e2e_client.get(f"/organizations/{org_id}/collections/", headers=b_h)).json() == []
+    assert (await e2e_client.get(f"/vault/?collection_id={cid}", headers=b_h)).status_code == 403
+    # ...and the collection item does NOT leak into the org-wide "General" listing.
+    assert (await e2e_client.get(f"/vault/?org_id={org_id}", headers=b_h)).json()["items"] == []
+
+    # Grant B access -> now B sees the collection (with their wrapped key) and the item.
+    await e2e_client.post(f"/organizations/{org_id}/collections/{cid}/access", headers=owner_h,
+        json={"email": "b@test.com", "wrapped_collection_key": "CK_B"})
+    b_colls = (await e2e_client.get(f"/organizations/{org_id}/collections/", headers=b_h)).json()
+    assert b_colls[0]["wrapped_collection_key"] == "CK_B"
+    assert (await e2e_client.get(f"/vault/?collection_id={cid}", headers=b_h)).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_collection_rbac_and_revoke(e2e_client):
+    org_id, owner_h, b_h = await _org_with_two_members(e2e_client)
+
+    # A plain member cannot create a collection.
+    assert (await e2e_client.post(f"/organizations/{org_id}/collections/", headers=b_h,
+            json={"name": "X", "wrapped_collection_key": "K"})).status_code == 403
+
+    coll = (await e2e_client.post(f"/organizations/{org_id}/collections/", headers=owner_h,
+            json={"name": "DevOps", "wrapped_collection_key": "CK_OWNER"})).json()
+    cid = coll["id"]
+    await e2e_client.post(f"/organizations/{org_id}/collections/{cid}/access", headers=owner_h,
+        json={"email": "b@test.com", "wrapped_collection_key": "CK_B"})
+
+    # Revoke B's access -> B loses the collection.
+    members = (await e2e_client.get(f"/organizations/{org_id}/collections/{cid}/members",
+               headers=owner_h)).json()
+    b_id = next(m["user_id"] for m in members if m["email"] == "b@test.com")
+    assert (await e2e_client.request("DELETE",
+        f"/organizations/{org_id}/collections/{cid}/access/{b_id}", headers=owner_h)).status_code == 200
+    assert (await e2e_client.get(f"/organizations/{org_id}/collections/", headers=b_h)).json() == []
+
+    # Delete the collection -> its items go too.
+    await e2e_client.post("/vault/", headers=owner_h,
+        json={"encrypted": "S", "iv": "AAAAAAAAAAAAAAAA", "org_id": org_id, "collection_id": cid})
+    assert (await e2e_client.request("DELETE",
+        f"/organizations/{org_id}/collections/{cid}", headers=owner_h)).status_code == 200
+    assert (await e2e_client.get(f"/organizations/{org_id}/collections/", headers=owner_h)).json() == []
+
+
 @pytest.mark.asyncio
 async def test_add_member_without_keys_fails(e2e_client):
     owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
