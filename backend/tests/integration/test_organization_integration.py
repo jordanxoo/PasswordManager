@@ -332,6 +332,34 @@ async def test_rotate_key_validation_and_rbac(e2e_client):
 
 
 @pytest.mark.asyncio
+async def test_admin_cannot_remove_admin(e2e_client):
+    owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
+    a_h, _ = await _register_and_login(e2e_client, "a@test.com", "PUB_A")
+    await _register_and_login(e2e_client, "b@test.com", "PUB_B")
+    org = (await e2e_client.post("/organizations/", headers=owner_h,
+           json={"name": "Acme", "wrapped_org_key": "WO"})).json()
+    org_id = org["id"]
+    for em, wk in [("a@test.com", "WA"), ("b@test.com", "WB")]:
+        await e2e_client.post(f"/organizations/{org_id}/members", headers=owner_h,
+                              json={"email": em, "role": "admin", "wrapped_org_key": wk})
+    members = (await e2e_client.get(f"/organizations/{org_id}/members", headers=owner_h)).json()
+    ids = {m["email"]: m["user_id"] for m in members}
+
+    # An admin may not remove another admin — via the plain delete...
+    r = await e2e_client.request("DELETE",
+        f"/organizations/{org_id}/members/{ids['b@test.com']}", headers=a_h)
+    assert r.status_code == 403
+    # ...nor via the rotation path.
+    rot = await e2e_client.post(f"/organizations/{org_id}/rotate-key", headers=a_h,
+        json={"remove_user_id": ids["b@test.com"], "member_keys": [], "vault_items": []})
+    assert rot.status_code == 403
+    # The owner still can.
+    r2 = await e2e_client.request("DELETE",
+        f"/organizations/{org_id}/members/{ids['b@test.com']}", headers=owner_h)
+    assert r2.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_add_member_without_keys_fails(e2e_client):
     owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
     # A user registered without a keypair (legacy) cannot be wrapped for.

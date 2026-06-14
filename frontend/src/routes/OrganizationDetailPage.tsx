@@ -211,7 +211,8 @@ export function OrganizationDetailPage() {
                       {ROLE_LABEL[m.role] ?? m.role}
                     </span>
                   )}
-                  {m.role !== "owner" && (canManage || isSelf) && (
+                  {m.role !== "owner" &&
+                    (isSelf || (canManage && (m.role !== "admin" || isOwner))) && (
                     <button
                       aria-label={isSelf ? "Leave organization" : "Remove member"}
                       disabled={busy || removeMember.isPending}

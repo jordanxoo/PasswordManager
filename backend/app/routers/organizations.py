@@ -174,7 +174,7 @@ async def rotate_key_endpoint(
     membership = Depends(require_org_role(OrgRole.ADMIN))):
 
     result = await rotate_org_key(db, org_id, data.remove_user_id,
-                                  data.member_keys, data.vault_items)
+                                  data.member_keys, data.vault_items, membership)
     meta = {"org_id": str(org_id)}
     if data.remove_user_id is not None:
         meta["removed_member"] = str(data.remove_user_id)

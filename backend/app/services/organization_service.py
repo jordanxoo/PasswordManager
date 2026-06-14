@@ -111,12 +111,21 @@ async def remove_member(db, org_id, target_user_id, acting_membership):
     target = await get_membership(db, org_id, target_user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="Member not found")
-    if target.role == OrgRole.OWNER:
-        raise HTTPException(status_code=400, detail="Cannot remove the organization owner")
+    _check_removable(target, acting_membership, is_self)
 
     await db.delete(target)
     await db.commit()
     return {"message": "removed"}
+
+
+def _check_removable(target, acting_membership, is_self):
+    """Shared removal guards: the owner is never removable, and only the owner
+    may remove an admin (admins manage members, not each other)."""
+    if target.role == OrgRole.OWNER:
+        raise HTTPException(status_code=400, detail="Cannot remove the organization owner")
+    if not is_self and target.role == OrgRole.ADMIN \
+            and acting_membership.role != OrgRole.OWNER:
+        raise HTTPException(status_code=403, detail="Only the owner can remove an admin")
 
 
 async def update_settings(db, org_id, member_write):
@@ -238,7 +247,7 @@ async def confirm_member(db, org_id, target_user_id, wrapped_org_key):
     return target
 
 
-async def rotate_org_key(db, org_id, remove_user_id, member_keys, vault_items):
+async def rotate_org_key(db, org_id, remove_user_id, member_keys, vault_items, acting_membership):
     """Re-key an organization: store the new wrapped org key for every remaining
     confirmed member and replace every shared entry's ciphertext — atomically.
 
@@ -249,8 +258,8 @@ async def rotate_org_key(db, org_id, remove_user_id, member_keys, vault_items):
         target = await get_membership(db, org_id, remove_user_id)
         if target is None:
             raise HTTPException(status_code=404, detail="Member not found")
-        if target.role == OrgRole.OWNER:
-            raise HTTPException(status_code=400, detail="Cannot remove the organization owner")
+        is_self = str(acting_membership.user_id) == str(remove_user_id)
+        _check_removable(target, acting_membership, is_self)
         await db.delete(target)
         await db.flush()
 
