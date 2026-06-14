@@ -125,6 +125,17 @@ class CollectionMemberResponse(BaseModel):
     created_at: datetime
 
 
+class CollectionMemberKey(BaseModel):
+    user_id: UUID
+    wrapped_collection_key: str = Field(min_length=1, max_length=8192)
+
+
+class CollectionRotateRequest(BaseModel):
+    remove_user_id: UUID | None = None
+    member_keys: list[CollectionMemberKey]
+    vault_items: list[RotatedItem]
+
+
 class RotateKeyRequest(BaseModel):
     # Optionally remove a member as part of the same atomic re-key.
     remove_user_id: UUID | None = None

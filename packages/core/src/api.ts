@@ -70,6 +70,13 @@ export interface RotateKeyPayload {
   vault_items: { id: string; encrypted: string; iv: string }[];
 }
 
+/** Collection key rotation payload (snake_case wire format). */
+export interface CollectionRotatePayload {
+  remove_user_id?: string;
+  member_keys: { user_id: string; wrapped_collection_key: string }[];
+  vault_items: { id: string; encrypted: string; iv: string }[];
+}
+
 /**
  * Stateful API client. Holds the short-lived access token in memory and
  * transparently refreshes it (via the httpOnly refresh-token cookie) on 401.
@@ -402,6 +409,15 @@ export function createApiClient(baseUrl: string) {
 
     deleteCollection(orgId: string, cid: string): Promise<void> {
       return request(`/organizations/${orgId}/collections/${cid}`, { method: "DELETE" });
+    },
+
+    /** Re-key a collection: new wrapped keys for remaining members + re-encrypted
+     *  items, optionally revoking a member in the same atomic call (admin+). */
+    rotateCollectionKey(orgId: string, cid: string, payload: CollectionRotatePayload): Promise<{ message: string }> {
+      return request(`/organizations/${orgId}/collections/${cid}/rotate-key`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
     },
 
     // --- vault ---

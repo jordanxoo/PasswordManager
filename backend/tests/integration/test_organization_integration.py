@@ -497,6 +497,43 @@ async def test_collection_rbac_and_revoke(e2e_client):
 
 
 @pytest.mark.asyncio
+async def test_collection_key_rotation_on_revoke(e2e_client):
+    org_id, owner_h, b_h = await _org_with_two_members(e2e_client)
+    coll = (await e2e_client.post(f"/organizations/{org_id}/collections/", headers=owner_h,
+            json={"name": "DevOps", "wrapped_collection_key": "CK_OWNER"})).json()
+    cid = coll["id"]
+    await e2e_client.post(f"/organizations/{org_id}/collections/{cid}/access", headers=owner_h,
+        json={"email": "b@test.com", "wrapped_collection_key": "CK_B"})
+    item = (await e2e_client.post("/vault/", headers=owner_h,
+            json={"encrypted": "OLD", "iv": "AAAAAAAAAAAAAAAA",
+                  "org_id": org_id, "collection_id": cid})).json()
+    members = (await e2e_client.get(f"/organizations/{org_id}/collections/{cid}/members",
+               headers=owner_h)).json()
+    ids = {m["email"]: m["user_id"] for m in members}
+
+    # A plain member cannot rotate.
+    assert (await e2e_client.post(f"/organizations/{org_id}/collections/{cid}/rotate-key",
+            headers=b_h, json={"member_keys": [], "vault_items": []})).status_code == 403
+
+    # Rotate, revoking B; re-wrap for owner only + re-encrypt the item.
+    rot = await e2e_client.post(f"/organizations/{org_id}/collections/{cid}/rotate-key",
+        headers=owner_h, json={
+            "remove_user_id": ids["b@test.com"],
+            "member_keys": [{"user_id": ids["owner@test.com"], "wrapped_collection_key": "CK_OWNER2"}],
+            "vault_items": [{"id": item["id"], "encrypted": "NEW", "iv": "BBBBBBBBBBBBBBBB"}],
+        })
+    assert rot.status_code == 200
+
+    # B lost access; owner has a fresh key; the ciphertext was replaced.
+    assert (await e2e_client.get(f"/organizations/{org_id}/collections/", headers=b_h)).json() == []
+    assert (await e2e_client.get(f"/vault/?collection_id={cid}", headers=b_h)).status_code == 403
+    owner_colls = (await e2e_client.get(f"/organizations/{org_id}/collections/", headers=owner_h)).json()
+    assert owner_colls[0]["wrapped_collection_key"] == "CK_OWNER2"
+    owner_items = (await e2e_client.get(f"/vault/?collection_id={cid}", headers=owner_h)).json()
+    assert [i["encrypted"] for i in owner_items["items"]] == ["NEW"]
+
+
+@pytest.mark.asyncio
 async def test_add_member_without_keys_fails(e2e_client):
     owner_h, _ = await _register_and_login(e2e_client, "owner@test.com", "PUB_OWNER")
     # A user registered without a keypair (legacy) cannot be wrapped for.

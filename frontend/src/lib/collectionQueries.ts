@@ -4,6 +4,8 @@ import {
   importPublicKey,
   wrapOrgKey,
   unwrapOrgKey,
+  encryptEntry,
+  decryptEntry,
   type Collection,
 } from "@pm/core";
 import { api } from "./api";
@@ -78,5 +80,54 @@ export function useDeleteCollection(orgId: string) {
   return useMutation({
     mutationFn: (cid: string) => api.deleteCollection(orgId, cid),
     onSuccess: () => qc.invalidateQueries({ queryKey: collectionsKey(orgId) }),
+  });
+}
+
+/**
+ * Rotate a collection's key: generate a fresh key, re-encrypt every item with
+ * it, re-wrap it for every remaining member with access — optionally revoking a
+ * member atomically. Invalidates the old key a removed member may have cached.
+ */
+export function useRotateCollectionKey(orgId: string, collection: Collection | undefined) {
+  const qc = useQueryClient();
+  const privateKey = useAuth((s) => s.privateKey);
+  return useMutation({
+    mutationFn: async ({ removeUserId }: { removeUserId?: string }) => {
+      if (!collection) throw new Error("Collection not loaded yet — try again in a moment.");
+      if (!privateKey) throw new Error("Session locked. Please sign in again.");
+      const oldKey = await unwrapOrgKey(collection.wrapped_collection_key, privateKey);
+      const newKey = await generateOrgKey();
+
+      // Re-encrypt every item in the collection with the new key.
+      const items = await api.listAllVault(orgId, collection.id);
+      const vault_items = await Promise.all(
+        items.map(async (it) => {
+          const plain = await decryptEntry({ encrypted: it.encrypted, iv: it.iv }, oldKey);
+          const enc = await encryptEntry(plain, newKey);
+          return { id: it.id, encrypted: enc.encrypted, iv: enc.iv };
+        }),
+      );
+
+      // Re-wrap the new key for every remaining member with access.
+      const members = await api.listCollectionMembers(orgId, collection.id);
+      const remaining = members.filter((m) => m.user_id !== removeUserId);
+      const member_keys = await Promise.all(
+        remaining.map(async (m) => {
+          const pk = await api.getPublicKey(m.email);
+          const pub = await importPublicKey(pk.public_key);
+          return { user_id: m.user_id, wrapped_collection_key: await wrapOrgKey(newKey, pub) };
+        }),
+      );
+
+      return api.rotateCollectionKey(orgId, collection.id, { remove_user_id: removeUserId, member_keys, vault_items });
+    },
+    onSuccess: () => {
+      if (!collection) return;
+      qc.invalidateQueries({ queryKey: collectionsKey(orgId) });
+      qc.invalidateQueries({ queryKey: collMembersKey(orgId, collection.id) });
+      // Re-derive the unwrapped collection key + refetch the collection vault.
+      qc.invalidateQueries({ queryKey: ["orgKey", orgId] });
+      qc.invalidateQueries({ queryKey: ["vault", orgId, collection.id] });
+    },
   });
 }

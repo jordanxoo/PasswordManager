@@ -88,6 +88,57 @@ async def revoke_access(db, org_id, collection_id, user_id):
     return {"message": "revoked"}
 
 
+async def rotate_collection_key(db, org_id, collection_id, remove_user_id, member_keys, vault_items):
+    """Re-key a collection: new wrapped key for every remaining member with access
+    and replaced ciphertext for every item — atomically. Optionally revokes a
+    member in the same call. Mirrors organization_service.rotate_org_key."""
+    await _get_collection_in_org(db, org_id, collection_id)
+
+    # 1. Optionally revoke a member's access as part of the rotation.
+    if remove_user_id is not None:
+        target = await get_collection_access(db, collection_id, remove_user_id)
+        if target is None:
+            raise HTTPException(status_code=404, detail="Member has no access to this collection")
+        await db.delete(target)
+        await db.flush()
+
+    # 2. New wrapped keys must cover exactly the remaining members with access.
+    rows = (await db.execute(
+        select(CollectionAccess).where(
+            CollectionAccess.collection_id == collection_id))).scalars().all()
+    by_user = {str(a.user_id): a for a in rows}
+    provided = {str(mk.user_id): mk.wrapped_collection_key for mk in member_keys}
+    if set(provided) != set(by_user):
+        raise HTTPException(
+            status_code=400,
+            detail="member_keys must cover exactly the remaining members with access")
+
+    # 3. Re-encrypted items must cover exactly the active collection entries.
+    vaults = (await db.execute(
+        select(Vault).where(Vault.collection_id == collection_id))).scalars().all()
+    active = {str(v.id): v for v in vaults if not v.is_deleted}
+    provided_items = {str(i.id): i for i in vault_items}
+    if set(provided_items) != set(active):
+        raise HTTPException(
+            status_code=400,
+            detail="vault_items must cover exactly the active collection entries")
+
+    # 4. Apply new wrapped keys + new ciphertext.
+    for uid, wrapped in provided.items():
+        by_user[uid].wrapped_collection_key = wrapped
+    for vid, item in provided_items.items():
+        active[vid].encrypted = item.encrypted
+        active[vid].iv = item.iv
+
+    # 5. Purge old-key ciphertext: collection-entry history + soft-deleted entries.
+    coll_vault_ids = select(Vault.id).where(Vault.collection_id == collection_id)
+    await db.execute(delete(VaultHistory).where(VaultHistory.vault_id.in_(coll_vault_ids)))
+    await db.execute(delete(Vault).where(Vault.collection_id == collection_id,
+                                         Vault.is_deleted == True))
+    await db.commit()
+    return {"message": "rotated"}
+
+
 async def delete_collection(db, org_id, collection_id):
     """Delete a collection and everything it owns. FKs lack CASCADE, so children
     go before parents (cf. delete_organization)."""

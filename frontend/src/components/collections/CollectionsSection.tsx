@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderPlus, Trash2, Users } from "lucide-react";
+import { FolderPlus, KeyRound, Trash2, Users } from "lucide-react";
 import { ApiError, type Collection } from "@pm/core";
 import {
   useCollections,
@@ -7,7 +7,7 @@ import {
   useDeleteCollection,
   useCollectionMembers,
   useGrantCollectionAccess,
-  useRevokeCollectionAccess,
+  useRotateCollectionKey,
 } from "../../lib/collectionQueries";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
@@ -114,7 +114,7 @@ function AccessModal({
 }) {
   const { data: members } = useCollectionMembers(orgId, collection.id);
   const grant = useGrantCollectionAccess(orgId, collection);
-  const revoke = useRevokeCollectionAccess(orgId, collection.id);
+  const rotate = useRotateCollectionKey(orgId, collection);
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
 
@@ -125,6 +125,28 @@ function AccessModal({
       setEmail("");
     } catch (e) {
       setError(errMsg(e, "Could not grant access"));
+    }
+  }
+
+  // Revoking re-keys the collection so the removed member's cached key dies.
+  async function onRevoke(userId: string) {
+    setError("");
+    try {
+      await rotate.mutateAsync({ removeUserId: userId });
+    } catch (e) {
+      setError(errMsg(e, "Could not revoke access"));
+    }
+  }
+
+  async function onRotate() {
+    setError("");
+    if (!window.confirm(
+      "Generate a new key for this collection and re-encrypt its items? " +
+      "Version history of these items will be cleared.")) return;
+    try {
+      await rotate.mutateAsync({});
+    } catch (e) {
+      setError(errMsg(e, "Could not rotate key"));
     }
   }
 
@@ -139,8 +161,9 @@ function AccessModal({
               <span className="truncate text-[13px] text-zinc-800">{m.email}</span>
               <button
                 aria-label="Revoke access"
-                onClick={() => revoke.mutate(m.user_id)}
-                className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                disabled={rotate.isPending}
+                onClick={() => void onRevoke(m.user_id)}
+                className="rounded-md p-1 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
               >
                 <Trash2 size={15} />
               </button>
@@ -150,6 +173,12 @@ function AccessModal({
             <li className="px-3 py-2 text-[13px] text-zinc-500">No one has access yet.</li>
           )}
         </ul>
+        <div className="flex justify-end">
+          <Button size="sm" variant="secondary" disabled={rotate.isPending}
+            onClick={() => void onRotate()}>
+            <KeyRound size={15} /> {rotate.isPending ? "Re-keying…" : "Rotate key"}
+          </Button>
+        </div>
         <Field label="Add by email" htmlFor="grant-email" hint="Must be a confirmed org member.">
           <div className="flex gap-2">
             <Input id="grant-email" type="email" value={email}

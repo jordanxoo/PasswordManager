@@ -7,10 +7,11 @@ from app.dependencies import require_org_role
 from app.models.enums import OrgRole
 from app.schemas.organization import (
     CollectionCreate, CollectionResponse, CollectionAccessGrant, CollectionMemberResponse,
+    CollectionRotateRequest,
 )
 from app.services.collection_service import (
     create_collection, list_collections, list_collection_members,
-    grant_access, revoke_access, delete_collection,
+    grant_access, revoke_access, delete_collection, rotate_collection_key,
 )
 
 # Mounted at /organizations/{org_id}/collections
@@ -81,6 +82,18 @@ async def revoke_access_endpoint(
     membership = Depends(require_org_role(OrgRole.ADMIN))):
 
     return await revoke_access(db, org_id, collection_id, user_id)
+
+
+@router.post("/{collection_id}/rotate-key")
+async def rotate_collection_key_endpoint(
+    org_id: UUID,
+    collection_id: UUID,
+    data: CollectionRotateRequest,
+    db: AsyncSession = Depends(get_db),
+    membership = Depends(require_org_role(OrgRole.ADMIN))):
+
+    return await rotate_collection_key(db, org_id, collection_id, data.remove_user_id,
+                                       data.member_keys, data.vault_items)
 
 
 @router.delete("/{collection_id}")
