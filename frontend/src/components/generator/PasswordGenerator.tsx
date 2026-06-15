@@ -32,6 +32,14 @@ const STRENGTH_META: Record<StrengthLevel, { label: string; fill: string; text: 
   excellent: { label: "Excellent", fill: "bg-emerald-500", text: "text-emerald-600", bars: 4 },
 };
 
+// Color each character by class, like Bitwarden: digits and symbols stand out
+// from letters so the password's shape is easy to scan.
+function colorFor(ch: string): string {
+  if (ch >= "0" && ch <= "9") return "text-blue-600";
+  if (/[a-zA-Z]/.test(ch)) return "text-zinc-900";
+  return "text-rose-500"; // symbols
+}
+
 function loadOptions(): GeneratorOptions {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -91,7 +99,15 @@ export function PasswordGenerator({ onUse }: Props) {
             aria-label="Generated password"
             className="flex min-h-[3rem] flex-1 items-center break-all rounded-md border border-zinc-200 bg-canvas px-3 py-2 font-mono text-sm text-zinc-900"
           >
-            {password || <span className="text-zinc-400">Select at least one character set</span>}
+            {password ? (
+              password.split("").map((ch, i) => (
+                <span key={i} className={colorFor(ch)}>
+                  {ch}
+                </span>
+              ))
+            ) : (
+              <span className="text-zinc-400">Select at least one character set</span>
+            )}
           </output>
           <div className="flex items-center gap-1 self-center">
             <CopyButton value={password} label="Copy password">

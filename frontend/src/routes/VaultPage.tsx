@@ -80,7 +80,7 @@ export function VaultPage() {
               aria-label="Vault context"
               value={orgId ?? ""}
               onChange={(e) => setOrgId(e.target.value || null)}
-              className="h-8 rounded-md border border-zinc-200 bg-surface px-2 text-[13px] text-zinc-700"
+              className="h-8 cursor-pointer appearance-none rounded-md border border-zinc-200 bg-surface px-2 text-[13px] text-zinc-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-zinc-900/10"
             >
               <option value="">My vault</option>
               {orgs?.map((o) => (
@@ -94,7 +94,7 @@ export function VaultPage() {
                 aria-label="Collection"
                 value={collectionId ?? ""}
                 onChange={(e) => setCollectionId(e.target.value || null)}
-                className="h-8 rounded-md border border-zinc-200 bg-surface px-2 text-[13px] text-zinc-700"
+                className="h-8 cursor-pointer appearance-none rounded-md border border-zinc-200 bg-surface px-2 text-[13px] text-zinc-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-zinc-900/10"
               >
                 <option value="">General</option>
                 {collections?.map((c) => (
